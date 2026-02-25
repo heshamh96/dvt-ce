@@ -154,7 +154,9 @@ class ForeignKeyConstraintToSyntaxError(CompilationError):
 class NoSupportedLanguagesFoundError(CompilationError):
     def __init__(self, node) -> None:
         self.node = node
-        self.msg = f"No supported_languages found in materialization macro {self.node.name}"
+        self.msg = (
+            f"No supported_languages found in materialization macro {self.node.name}"
+        )
         super().__init__(msg=self.msg)
 
 
@@ -196,7 +198,13 @@ class NoAdaptersAvailableError(DbtRuntimeError):
         super().__init__(msg=self.get_message())
 
     def get_message(self) -> str:
-        msg = "No adapters available. Learn how to install an adapter by going to https://docs.getdbt.com/docs/connect-adapters#install-using-the-cli"
+        msg = (
+            "No database adapters are installed.\n\n"
+            "To fix this:\n"
+            "  1. Edit ~/.dvt/profiles.yml and configure your database connection\n"
+            "     (see https://docs.getdbt.com/docs/available-adapters for supported adapters)\n"
+            "  2. Run 'dvt sync' to automatically install the required adapter\n"
+        )
         return msg
 
 
@@ -227,7 +235,9 @@ class GitCloningError(DbtInternalError):
             self.error.cmd = list(scrub_secrets(str(self.error.cmd), env_secrets()))
             raise self.error
 
-        msg = f"Error checking out spec='{self.revision}' for repo {self.repo}\n{stderr}"
+        msg = (
+            f"Error checking out spec='{self.revision}' for repo {self.repo}\n{stderr}"
+        )
         return scrub_secrets(msg, env_secrets())
 
 
@@ -293,7 +303,9 @@ class OperationsCannotRefEphemeralNodesError(CompilationError):
     def __init__(self, target_name: str, node) -> None:
         self.target_name = target_name
         self.node = node
-        msg = f"Operations can not ref() ephemeral nodes, but {target_name} is ephemeral"
+        msg = (
+            f"Operations can not ref() ephemeral nodes, but {target_name} is ephemeral"
+        )
         super().__init__(msg=msg)
 
 
@@ -319,7 +331,9 @@ class ConflictingConfigKeysError(CompilationError):
         self.oldkey = oldkey
         self.newkey = newkey
         self.node = node
-        msg = f'Invalid config, has conflicting keys "{self.oldkey}" and "{self.newkey}"'
+        msg = (
+            f'Invalid config, has conflicting keys "{self.oldkey}" and "{self.newkey}"'
+        )
         super().__init__(msg=msg)
 
 
@@ -351,7 +365,11 @@ class RequiredVarNotFoundError(CompilationError):
         return scrub_secrets(msg, self.var_secrets())
 
     def var_secrets(self) -> List[str]:
-        return [v for k, v in self.merged.items() if k.startswith(SECRET_ENV_PREFIX) and v.strip()]
+        return [
+            v
+            for k, v in self.merged.items()
+            if k.startswith(SECRET_ENV_PREFIX) and v.strip()
+        ]
 
 
 class PackageNotFoundForMacroError(CompilationError):
@@ -432,7 +450,8 @@ class RefBadContextError(CompilationError):
         keyword_args = ""
         if self.kwargs:
             keyword_args = ", ".join(
-                "{}='{}'".format(k, v) for k, v in self.kwargs.items()  # type: ignore
+                "{}='{}'".format(k, v)
+                for k, v in self.kwargs.items()  # type: ignore
             )
             keyword_args = "," + keyword_args
 
@@ -675,7 +694,9 @@ class SnapshopConfigError(ParsingError):
 
 
 class DvtReferenceError(ParsingError):
-    def __init__(self, unique_id: str, ref_unique_id: str, access: AccessType, scope: str) -> None:
+    def __init__(
+        self, unique_id: str, ref_unique_id: str, access: AccessType, scope: str
+    ) -> None:
         self.unique_id = unique_id
         self.ref_unique_id = ref_unique_id
         self.access = access
@@ -699,7 +720,9 @@ class InvalidAccessTypeError(ParsingError):
         self.materialization = materialization
 
         with_materialization = (
-            f"with '{self.materialization}' materialization " if self.materialization else ""
+            f"with '{self.materialization}' materialization "
+            if self.materialization
+            else ""
         )
         msg = f"Node {self.unique_id} {with_materialization}has an invalid value ({self.field_value}) for the access field"
         super().__init__(msg=msg)
@@ -770,7 +793,9 @@ class CustomMacroPopulatingConfigValueError(CompilationError):
 class TagsNotListOfStringsError(CompilationError):
     def __init__(self, tags: Any) -> None:
         self.tags = tags
-        msg = f"got {self.tags} ({type(self.tags)}) for tags, expected a list of strings"
+        msg = (
+            f"got {self.tags} ({type(self.tags)}) for tags, expected a list of strings"
+        )
         super().__init__(msg=msg)
 
 
@@ -924,7 +949,9 @@ class DuplicateMacroPatchNameError(CompilationError):
 
 # core level exceptions
 class DuplicateAliasError(AliasError):
-    def __init__(self, kwargs: Mapping[str, Any], aliases: Mapping[str, str], canonical_key: str):
+    def __init__(
+        self, kwargs: Mapping[str, Any], aliases: Mapping[str, str], canonical_key: str
+    ):
         self.kwargs = kwargs
         self.aliases = aliases
         self.canonical_key = canonical_key
@@ -933,7 +960,9 @@ class DuplicateAliasError(AliasError):
     def get_message(self) -> str:
         # dupe found: go through the dict so we can have a nice-ish error
         key_names = ", ".join(
-            "{}".format(k) for k in self.kwargs if self.aliases.get(k) == self.canonical_key
+            "{}".format(k)
+            for k in self.kwargs
+            if self.aliases.get(k) == self.canonical_key
         )
         msg = f'Got duplicate keys: ({key_names}) all map to "{self.canonical_key}"'
         return msg
@@ -1013,7 +1042,9 @@ class PackageVersionNotFoundError(DependencyError):
             else ""
         )
         msg = (
-            base_msg.format(self.package_name, self.version_range, self.available_versions)
+            base_msg.format(
+                self.package_name, self.version_range, self.available_versions
+            )
             + addendum
         )
         return msg
@@ -1090,10 +1121,10 @@ class UninstalledPackagesFoundError(CompilationError):
             f"dvt found {self.count_packages_specified} package(s) "
             f"specified in {self.packages_specified_path}, but only "
             f"{self.count_packages_installed} package(s) installed "
-            f'in {self.packages_install_path}.\n\n'
-            'To fix this, please run:\n'
-            '  dvt deps\n\n'
-            'This will install the package dependencies specified in your packages.yml file.'
+            f"in {self.packages_install_path}.\n\n"
+            "To fix this, please run:\n"
+            "  dvt deps\n\n"
+            "This will install the package dependencies specified in your packages.yml file."
         )
         return msg
 
@@ -1169,7 +1200,9 @@ class AmbiguousAliasError(CompilationError):
         self.node_1 = node_1
         self.node_2 = node_2
         if duped_name is None:
-            self.duped_name = f"{self.node_1.database}.{self.node_1.schema}.{self.node_1.alias}"
+            self.duped_name = (
+                f"{self.node_1.database}.{self.node_1.schema}.{self.node_1.alias}"
+            )
         else:
             self.duped_name = duped_name
         super().__init__(msg=self.get_message())
@@ -1295,7 +1328,9 @@ class DuplicateResourceNameError(CompilationError):
         # duplicate generic tests
         elif node_type == NodeType.Test and hasattr(self.node_1, "test_metadata"):
             column_name = (
-                f'column "{self.node_1.column_name}" in ' if self.node_1.column_name else ""
+                f'column "{self.node_1.column_name}" in '
+                if self.node_1.column_name
+                else ""
             )
             model_name = self.node_1.file_key_name
             duped_name = f'{self.node_1.name}" defined on {column_name}"{model_name}'
@@ -1363,7 +1398,12 @@ class ContractError(CompilationError):
         # avoid a circular import
         from dbt_common.clients.agate_helper import table_from_data_flat
 
-        column_names = ["column_name", "definition_type", "contract_type", "mismatch_reason"]
+        column_names = [
+            "column_name",
+            "definition_type",
+            "contract_type",
+            "mismatch_reason",
+        ]
         # list of mismatches
         mismatches: List[Dict[str, str]] = []
         # track sql cols so we don't need another for loop later
@@ -1392,13 +1432,23 @@ class ContractError(CompilationError):
                         break
                 # if last loop, then no name match
                 if i == len(self.yaml_columns) - 1:
-                    row = [sql_col["name"], sql_col["data_type"], "", "missing in contract"]
+                    row = [
+                        sql_col["name"],
+                        sql_col["data_type"],
+                        "",
+                        "missing in contract",
+                    ]
                     mismatches += [dict(zip(column_names, row))]
 
         # now add all yaml cols without a match
         for yaml_col in self.yaml_columns:
             if yaml_col["name"] not in sql_col_set:
-                row = [yaml_col["name"], "", yaml_col["data_type"], "missing in definition"]
+                row = [
+                    yaml_col["name"],
+                    "",
+                    yaml_col["data_type"],
+                    "missing in definition",
+                ]
                 mismatches += [dict(zip(column_names, row))]
 
         mismatches_sorted = sorted(mismatches, key=lambda d: d["column_name"])
@@ -1406,9 +1456,7 @@ class ContractError(CompilationError):
 
     def get_message(self) -> str:
         if not self.yaml_columns:
-            return (
-                "This model has an enforced contract, and its 'columns' specification is missing"
-            )
+            return "This model has an enforced contract, and its 'columns' specification is missing"
 
         table: "agate.Table" = self.get_mismatches()
         # Hack to get Agate table output as string
@@ -1480,7 +1528,10 @@ class RPCKilledException(DbtRuntimeError):
 
 class RPCCompiling(DbtRuntimeError):
     CODE = 10010
-    MESSAGE = 'RPC server is compiling the project, call the "status" method for' " compile status"
+    MESSAGE = (
+        'RPC server is compiling the project, call the "status" method for'
+        " compile status"
+    )
 
     def __init__(self, msg: Optional[str] = None, node=None):
         if msg is None:
@@ -1491,12 +1542,13 @@ class RPCCompiling(DbtRuntimeError):
 class RPCLoadException(DbtRuntimeError):
     CODE = 10011
     MESSAGE = (
-        'RPC server failed to compile project, call the "status" method for' " compile status"
+        'RPC server failed to compile project, call the "status" method for'
+        " compile status"
     )
 
     def __init__(self, cause: Dict[str, Any]):
         self.cause = cause
-        self.msg = f'{self.MESSAGE}: {self.cause["message"]}'
+        self.msg = f"{self.MESSAGE}: {self.cause['message']}"
         super().__init__(self.msg)
 
     def data(self):

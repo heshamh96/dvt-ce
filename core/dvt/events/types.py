@@ -121,9 +121,9 @@ class LogDbtProfileError(ErrorLevel):
             msg += "There are no profiles defined in your profiles.yml file"
 
         msg += """
-For more information on configuring profiles, please consult the dvt docs:
+For more information on configuring profiles, please consult the DVT docs:
 
-https://docs.getdbt.com/docs/configure-your-profile
+https://github.com/heshamh96/dvt#configuration-files
 """
         return msg
 
@@ -218,20 +218,18 @@ class ProjectCreated(InfoLevel):
 
     def message(self) -> str:
         return f"""
-Your new dvt project "{self.project_name}" was created!
+Your new DVT project "{self.project_name}" was created!
 
-For more information on how to configure the profiles.yml file,
-please consult the dvt documentation here:
+Next steps:
+  1. Edit your profiles.yml to configure database connections
+     (see https://docs.getdbt.com/docs/available-adapters for supported adapters)
+  2. Edit your computes.yml to configure Spark compute engines
+  3. Run 'dvt sync' to install adapters, PySpark, and JDBC drivers
+  4. Run 'dvt debug' to verify all connections
+  5. Run 'dvt run' to execute your models
 
-  {self.docs_url}
-
-One more thing:
-
-Need help? Don't hesitate to reach out to us via GitHub issues or on Slack:
-
-  {self.slack_url}
-
-Happy modeling!
+Documentation: https://github.com/heshamh96/dvt
+Need help? https://discord.gg/UjQcxJXAQp
 """
 
 

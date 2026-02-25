@@ -175,7 +175,7 @@ def global_flags(func):
 @p.show_resource_report
 def cli(ctx, **kwargs):
     """An ELT tool for managing your SQL transformations and data models.
-    For more documentation on these commands, visit: docs.getdbt.com
+    For more documentation on these commands, visit: github.com/heshamh96/dvt
     """
 
 
@@ -507,9 +507,9 @@ def deps(ctx, **kwargs):
 @requires.preflight
 def init(ctx, **kwargs):
     """Initialize a new DVT project (creates dbt_project.yml, ~/.dvt/, computes.yml, mdm.duckdb)."""
-    from dvt.task.init import InitTask
+    from dvt.dvt_tasks.dvt_init import DvtInitTask
 
-    with InitTask(ctx.obj["flags"]) as task:
+    with DvtInitTask(ctx.obj["flags"]) as task:
         results = task.run()
         success = task.interpret_results(results)
     return results, success

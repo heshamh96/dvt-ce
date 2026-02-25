@@ -124,11 +124,8 @@ def create_default_buckets_yml(path: Optional[Path] = None) -> bool:
 #     target: <bucket_name>   # Default bucket to use
 #     buckets:
 #       <bucket_name>:
-#         type: filesystem    # or s3, gcs, azure, hdfs
-#         # ... type-specific settings ...
-#
-# Supported types: filesystem (default), s3, gcs, azure, hdfs
-# Cloud storage dependencies are installed automatically by 'dvt sync'.
+#         type: filesystem
+#         # path: /custom/path  # Optional, defaults to project's .dvt/staging/
 #
 # Profiles are added automatically when you run 'dvt init <project_name>'.
 # See docs: https://github.com/heshamh96/dvt
@@ -275,91 +272,15 @@ def load_buckets_for_profile(
 
 
 def _bucket_profile_template(profile_name: str) -> str:
-    """Generate a bucket profile template with local filesystem as default.
-
-    Includes comprehensive examples for all cloud storage types and auth methods.
-    """
+    """Generate a bucket profile template with local filesystem as default."""
     return f"""{profile_name}:
   target: local  # Default bucket to use
   buckets:
-    # === Local Filesystem (Default) ===
     local:
       type: filesystem
       # Resolved at runtime to project's .dvt/staging/ directory
       # Override with absolute path if needed:
       # path: /custom/path/to/staging
-
-    # === Amazon S3 ===
-    # s3_staging:
-    #   type: s3
-    #   bucket: my-bucket
-    #   prefix: staging/
-    #   region: us-east-1
-    #
-    #   # Auth Option 1: Access Keys (basic)
-    #   access_key_id: ${{AWS_ACCESS_KEY_ID}}
-    #   secret_access_key: ${{AWS_SECRET_ACCESS_KEY}}
-    #
-    #   # Auth Option 2: Session Token (for temporary credentials)
-    #   # access_key_id: ${{AWS_ACCESS_KEY_ID}}
-    #   # secret_access_key: ${{AWS_SECRET_ACCESS_KEY}}
-    #   # session_token: ${{AWS_SESSION_TOKEN}}
-    #
-    #   # Auth Option 3: IAM Role (for Redshift COPY/UNLOAD)
-    #   # iam_role: arn:aws:iam::123456789:role/my-role
-    #
-    #   # Auth Option 4: Instance Profile (EC2/ECS/EKS)
-    #   # use_instance_profile: true
-    #
-    #   # Auth Option 5: Storage Integration (Snowflake)
-    #   # storage_integration: my_s3_integration
-    #
-    #   # S3-compatible storage (MinIO, LocalStack, etc.)
-    #   # endpoint: http://localhost:9000
-    #   # path_style_access: true
-
-    # === Google Cloud Storage ===
-    # gcs_staging:
-    #   type: gcs
-    #   bucket: my-bucket
-    #   prefix: staging/
-    #   project: my-gcp-project
-    #
-    #   # Auth Option 1: Service Account Key File
-    #   keyfile: /path/to/service-account.json
-    #
-    #   # Auth Option 2: Inline JSON (set via environment variable)
-    #   # keyfile_json: ${{GCP_SERVICE_ACCOUNT_JSON}}
-    #
-    #   # Auth Option 3: Application Default Credentials
-    #   # use_application_default: true
-    #
-    #   # Auth Option 4: Storage Integration (Snowflake)
-    #   # storage_integration: my_gcs_integration
-
-    # === Azure Blob Storage / ADLS Gen2 ===
-    # azure_staging:
-    #   type: azure
-    #   container: dvt-staging
-    #   storage_account: mystorageaccount
-    #   prefix: staging/
-    #
-    #   # Auth Option 1: Storage Account Key
-    #   account_key: ${{AZURE_STORAGE_KEY}}
-    #
-    #   # Auth Option 2: SAS Token
-    #   # sas_token: ${{AZURE_SAS_TOKEN}}
-    #
-    #   # Auth Option 3: Service Principal (Azure AD / Entra ID)
-    #   # client_id: ${{AZURE_CLIENT_ID}}
-    #   # client_secret: ${{AZURE_CLIENT_SECRET}}
-    #   # tenant_id: ${{AZURE_TENANT_ID}}
-    #
-    #   # Auth Option 4: Managed Identity (Azure VMs/AKS)
-    #   # use_managed_identity: true
-    #
-    #   # Auth Option 5: Storage Integration (Snowflake)
-    #   # storage_integration: my_azure_integration
 """
 
 

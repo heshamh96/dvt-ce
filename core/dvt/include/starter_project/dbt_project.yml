@@ -24,9 +24,9 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://docs.getdbt.com/docs/configuring-models
+# Full documentation: https://github.com/heshamh96/dvt
 
-# In this example config, we tell dbt to build all models in the example/
+# In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
 # files using the `{{{{ config(...) }}}}` macro.
 models:
