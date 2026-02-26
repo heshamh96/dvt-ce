@@ -31,20 +31,12 @@ class ShowRunner(CompileRunner):
         model_context = generate_runtime_model_context(
             compiled_node, self.config, manifest
         )
-
-        # Wrap compiled SQL in a subquery to avoid LIMIT clause conflicts.
-        # The get_show_sql macro appends its own LIMIT, which produces invalid
-        # SQL if the model already contains a LIMIT clause (e.g., "... LIMIT 100\nlimit 10").
-        # Wrapping in a subquery makes the outer LIMIT apply cleanly.
-        compiled_code = model_context["compiled_code"]
-        compiled_code = f"SELECT * FROM ({compiled_code}) AS _dvt_show_subq"
-
         compiled_node.compiled_code = self.adapter.execute_macro(
             macro_name="get_show_sql",
             macro_resolver=manifest,
             context_override=model_context,
             kwargs={
-                "compiled_code": compiled_code,
+                "compiled_code": model_context["compiled_code"],
                 "sql_header": model_context["config"].get("sql_header"),
                 "limit": limit,
             },

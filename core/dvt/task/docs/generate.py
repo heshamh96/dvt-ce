@@ -228,7 +228,8 @@ class GenerateTask(CompileTask):
                 )
 
         shutil.copyfile(
-            DOCS_INDEX_FILE_PATH, os.path.join(self.config.project_target_path, "index.html")
+            DOCS_INDEX_FILE_PATH,
+            os.path.join(self.config.project_target_path, "index.html"),
         )
 
         for asset_path in self.config.asset_paths:
@@ -258,7 +259,9 @@ class GenerateTask(CompileTask):
                 relations = None
                 if self.job_queue is not None:
                     selected_node_ids = self.job_queue.get_selected_nodes()
-                    selected_nodes = self._get_nodes_from_ids(self.manifest, selected_node_ids)
+                    selected_nodes = self._get_nodes_from_ids(
+                        self.manifest, selected_node_ids
+                    )
 
                     # Source selection is handled separately from main job_queue selection because
                     # SourceDefinition nodes cannot be safely compiled / run by the CompileRunner / CompileTask,
@@ -301,31 +304,27 @@ class GenerateTask(CompileTask):
             errors = [str(e) for e in exceptions]
 
         nodes, sources = catalog.make_unique_id_map(self.manifest, selected_node_ids)
-        source_connections, connection_metadata = self._get_source_connections_and_metadata(
-            selected_node_ids
-        )
         results = self.get_catalog_results(
             nodes=nodes,
             sources=sources,
             generated_at=datetime.now(timezone.utc).replace(tzinfo=None),
             compile_results=compile_results,
             errors=errors,
-            source_connections=source_connections,
-            connection_metadata=connection_metadata,
         )
 
         catalog_path = os.path.join(self.config.project_target_path, CATALOG_FILENAME)
         results.write(catalog_path)
         add_artifact_produced(catalog_path)
         fire_event(
-            ArtifactWritten(artifact_type=results.__class__.__name__, artifact_path=catalog_path)
+            ArtifactWritten(
+                artifact_type=results.__class__.__name__, artifact_path=catalog_path
+            )
         )
 
         if self.args.compile:
             write_manifest(self.manifest, self.config.project_target_path)
 
         if self.args.static:
-
             # Read manifest.json and catalog.json
             read_manifest_data = load_file_contents(
                 os.path.join(self.config.project_target_path, MANIFEST_FILE_NAME)
@@ -334,11 +333,17 @@ class GenerateTask(CompileTask):
 
             # Create new static index file contents
             index_data = load_file_contents(DOCS_INDEX_FILE_PATH)
-            index_data = index_data.replace('"MANIFEST.JSON INLINE DATA"', read_manifest_data)
-            index_data = index_data.replace('"CATALOG.JSON INLINE DATA"', read_catalog_data)
+            index_data = index_data.replace(
+                '"MANIFEST.JSON INLINE DATA"', read_manifest_data
+            )
+            index_data = index_data.replace(
+                '"CATALOG.JSON INLINE DATA"', read_catalog_data
+            )
 
             # Write out the new index file
-            static_index_path = os.path.join(self.config.project_target_path, "static_index.html")
+            static_index_path = os.path.join(
+                self.config.project_target_path, "static_index.html"
+            )
             with open(static_index_path, "wb") as static_index_file:
                 static_index_file.write(bytes(index_data, "utf8"))
 
@@ -349,7 +354,9 @@ class GenerateTask(CompileTask):
 
     def get_node_selector(self) -> ResourceTypeSelector:
         if self.manifest is None or self.graph is None:
-            raise DbtInternalError("manifest and graph must be set to perform node selection")
+            raise DbtInternalError(
+                "manifest and graph must be set to perform node selection"
+            )
         return ResourceTypeSelector(
             graph=self.graph,
             manifest=self.manifest,
@@ -358,32 +365,6 @@ class GenerateTask(CompileTask):
             include_empty_nodes=True,
         )
 
-    def _get_source_connections_and_metadata(
-        self, selected_node_ids: Optional[Set[UniqueId]]
-    ) -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
-        """Build source_connections (source unique_id -> target name) and connection_metadata for catalog/docs."""
-        source_connections: Dict[str, str] = {}
-        connection_metadata: Dict[str, Dict[str, Any]] = {}
-        default_target = getattr(self.config, "target_name", None) or ""
-
-        for unique_id, source in self.manifest.sources.items():
-            if selected_node_ids is not None and unique_id not in selected_node_ids:
-                continue
-            conn = getattr(source.config, "connection", None) if source.config else None
-            connection_identifier = conn if conn else default_target
-            source_connections[unique_id] = connection_identifier
-            if connection_identifier and connection_identifier not in connection_metadata:
-                connection_metadata[connection_identifier] = {}
-
-        if default_target and default_target not in connection_metadata:
-            connection_metadata[default_target] = {}
-        if getattr(self.config, "credentials", None) is not None:
-            adapter_type = getattr(self.config.credentials, "type", None)
-            if default_target and adapter_type:
-                connection_metadata.setdefault(default_target, {})["adapter_type"] = adapter_type
-
-        return source_connections, connection_metadata
-
     def get_catalog_results(
         self,
         nodes: Dict[str, CatalogTable],
@@ -391,8 +372,6 @@ class GenerateTask(CompileTask):
         generated_at: datetime,
         compile_results: Optional[Any],
         errors: Optional[List[str]],
-        source_connections: Optional[Dict[str, str]] = None,
-        connection_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
     ) -> CatalogArtifact:
         return CatalogArtifact.from_results(
             generated_at=generated_at,
@@ -400,8 +379,6 @@ class GenerateTask(CompileTask):
             sources=sources,
             compile_results=compile_results,
             errors=errors,
-            source_connections=source_connections,
-            connection_metadata=connection_metadata,
         )
 
     @classmethod
@@ -417,7 +394,9 @@ class GenerateTask(CompileTask):
         return super().interpret_results(compile_results)
 
     @staticmethod
-    def _get_nodes_from_ids(manifest: Manifest, node_ids: Iterable[str]) -> List[ResultNode]:
+    def _get_nodes_from_ids(
+        manifest: Manifest, node_ids: Iterable[str]
+    ) -> List[ResultNode]:
         selected: List[ResultNode] = []
         for unique_id in node_ids:
             if unique_id in manifest.nodes:
@@ -431,7 +410,9 @@ class GenerateTask(CompileTask):
 
     def _get_selected_source_ids(self) -> Set[UniqueId]:
         if self.manifest is None or self.graph is None:
-            raise DbtInternalError("manifest and graph must be set to perform node selection")
+            raise DbtInternalError(
+                "manifest and graph must be set to perform node selection"
+            )
 
         source_selector = ResourceTypeSelector(
             graph=self.graph,
@@ -440,4 +421,6 @@ class GenerateTask(CompileTask):
             resource_types=[NodeType.Source],
         )
 
-        return source_selector.get_graph_queue(self.get_selection_spec()).get_selected_nodes()
+        return source_selector.get_graph_queue(
+            self.get_selection_spec()
+        ).get_selected_nodes()

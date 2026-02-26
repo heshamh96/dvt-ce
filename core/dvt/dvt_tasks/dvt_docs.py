@@ -39,7 +39,7 @@ from dvt.adapters.events.types import (
     WriteCatalogFailure,
 )
 from dvt.adapters.factory import get_adapter
-from dvt.artifacts.schemas.catalog import CatalogArtifact, PrimitiveDict
+from dvt.artifacts.schemas.catalog import CatalogArtifact, CatalogTable, PrimitiveDict
 from dvt.artifacts.schemas.results import NodeStatus
 from dvt.constants import CATALOG_FILENAME, MANIFEST_FILE_NAME
 from dvt.contracts.graph.manifest import Manifest
@@ -64,6 +64,61 @@ class DvtDocsGenerateTask(GenerateTask):
     cross-database errors when the manifest contains nodes/sources from
     different database engines.
     """
+
+    # ------------------------------------------------------------------
+    # DVT: Source connection metadata (moved from base GenerateTask)
+    # ------------------------------------------------------------------
+
+    def _get_source_connections_and_metadata(
+        self, selected_node_ids: Optional[Set[UniqueId]]
+    ) -> Tuple[Dict[str, str], Dict[str, Dict[str, Any]]]:
+        """Build source_connections (source unique_id -> target name) and connection_metadata for catalog/docs."""
+        source_connections: Dict[str, str] = {}
+        connection_metadata: Dict[str, Dict[str, Any]] = {}
+        default_target = getattr(self.config, "target_name", None) or ""
+
+        for unique_id, source in self.manifest.sources.items():
+            if selected_node_ids is not None and unique_id not in selected_node_ids:
+                continue
+            conn = getattr(source.config, "connection", None) if source.config else None
+            connection_identifier = conn if conn else default_target
+            source_connections[unique_id] = connection_identifier
+            if (
+                connection_identifier
+                and connection_identifier not in connection_metadata
+            ):
+                connection_metadata[connection_identifier] = {}
+
+        if default_target and default_target not in connection_metadata:
+            connection_metadata[default_target] = {}
+        if getattr(self.config, "credentials", None) is not None:
+            adapter_type = getattr(self.config.credentials, "type", None)
+            if default_target and adapter_type:
+                connection_metadata.setdefault(default_target, {})["adapter_type"] = (
+                    adapter_type
+                )
+
+        return source_connections, connection_metadata
+
+    def get_catalog_results(
+        self,
+        nodes: Dict[str, CatalogTable],
+        sources: Dict[str, CatalogTable],
+        generated_at: datetime,
+        compile_results: Optional[Any],
+        errors: Optional[List[str]],
+        source_connections: Optional[Dict[str, str]] = None,
+        connection_metadata: Optional[Dict[str, Dict[str, Any]]] = None,
+    ) -> CatalogArtifact:
+        return CatalogArtifact.from_results(
+            generated_at=generated_at,
+            nodes=nodes,
+            sources=sources,
+            compile_results=compile_results,
+            errors=errors,
+            source_connections=source_connections,
+            connection_metadata=connection_metadata,
+        )
 
     # ------------------------------------------------------------------
     # Profile / target helpers (same pattern as DvtCompiler)

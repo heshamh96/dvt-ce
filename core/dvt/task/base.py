@@ -107,8 +107,9 @@ def get_nearest_project_dir(project_dir: Optional[str]) -> Path:
 
 def move_to_nearest_project_dir(project_dir: Optional[str]) -> Path:
     nearest_project_dir = get_nearest_project_dir(project_dir)
-    os.chdir(nearest_project_dir)
-    return nearest_project_dir
+    resolved_nearest_project_dir = nearest_project_dir.resolve()
+    os.chdir(resolved_nearest_project_dir)
+    return resolved_nearest_project_dir
 
 
 # TODO: look into deprecating this class in favor of several small functions that
@@ -134,7 +135,9 @@ class ConfiguredTask(BaseTask):
 
         compile_time = time.perf_counter() - start_compile_manifest
         if dvt.tracking.active_user is not None:
-            dvt.tracking.track_runnable_timing({"graph_compilation_elapsed": compile_time})
+            dvt.tracking.track_runnable_timing(
+                {"graph_compilation_elapsed": compile_time}
+            )
 
     @classmethod
     def from_args(cls, args: Flags, *pargs, **kwargs):
@@ -310,7 +313,9 @@ class BaseRunner(metaclass=ABCMeta):
 
         return result
 
-    def _handle_catchable_exception(self, e: DbtRuntimeError, ctx: ExecutionContext) -> str:
+    def _handle_catchable_exception(
+        self, e: DbtRuntimeError, ctx: ExecutionContext
+    ) -> str:
         if e.node is None:
             e.add_node(ctx.node)
 
@@ -321,10 +326,14 @@ class BaseRunner(metaclass=ABCMeta):
         )
         return str(e)
 
-    def _handle_internal_exception(self, e: DbtInternalError, ctx: ExecutionContext) -> str:
+    def _handle_internal_exception(
+        self, e: DbtInternalError, ctx: ExecutionContext
+    ) -> str:
         fire_event(
             InternalErrorOnRun(
-                build_path=self._node_build_path(), exc=str(e), node_info=get_node_info()
+                build_path=self._node_build_path(),
+                exc=str(e),
+                node_info=get_node_info(),
             )
         )
         return str(e)
@@ -391,7 +400,9 @@ class BaseRunner(metaclass=ABCMeta):
         except Exception as exc:
             fire_event(
                 NodeConnectionReleaseError(
-                    node_name=self.node.name, exc=str(exc), exc_info=traceback.format_exc()
+                    node_name=self.node.name,
+                    exc=str(exc),
+                    exc_info=traceback.format_exc(),
                 )
             )
             return str(exc)
@@ -475,7 +486,9 @@ class BaseRunner(metaclass=ABCMeta):
 
 
 def resource_types_from_args(
-    args: Flags, all_resource_values: Set[NodeType], default_resource_values: Set[NodeType]
+    args: Flags,
+    all_resource_values: Set[NodeType],
+    default_resource_values: Set[NodeType],
 ) -> Set[NodeType]:
 
     if not args.resource_types:
@@ -495,7 +508,9 @@ def resource_types_from_args(
 
     if args.exclude_resource_types:
         # Convert from a list of strings to a set of NodeTypes
-        exclude_resource_types = set([NodeType(rt) for rt in args.exclude_resource_types])
+        exclude_resource_types = set(
+            [NodeType(rt) for rt in args.exclude_resource_types]
+        )
         resource_types = resource_types - exclude_resource_types
 
     return resource_types

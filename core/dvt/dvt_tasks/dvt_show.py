@@ -6,19 +6,79 @@ on the correct target adapter.
 
 Uses DvtCompiler on the default ShowRunner path so that cross-dialect
 SQL transpilation is applied when previewing models.
+
+DvtShowRunner wraps compiled SQL in a subquery to avoid LIMIT clause
+conflicts when the model already contains a LIMIT.
 """
 
 from __future__ import annotations
 
+import threading
+import time
 from typing import Dict
 
 from dvt.adapters.factory import get_adapter
+from dvt.artifacts.schemas.run import RunResult, RunStatus
+from dvt.context.providers import generate_runtime_model_context
 from dvt.contracts.graph.nodes import SeedNode
 from dvt.dvt_compilation.dvt_compiler import DvtCompiler
 from dvt.dvt_runners.show_runner_target_aware import ShowRunnerTargetAware
 from dvt.federation.resolver import ExecutionPath, FederationResolver, ResolvedExecution
 from dvt.task.seed import SeedRunner
 from dvt.task.show import ShowRunner, ShowTask
+
+
+class DvtShowRunner(ShowRunner):
+    """ShowRunner that wraps compiled SQL in a subquery to avoid LIMIT conflicts.
+
+    The upstream get_show_sql macro appends its own LIMIT, which produces
+    invalid SQL if the model already contains a LIMIT clause (e.g.,
+    "... LIMIT 100\\nlimit 10").  Wrapping in a subquery makes the outer
+    LIMIT apply cleanly.
+    """
+
+    def execute(self, compiled_node, manifest):
+        start_time = time.time()
+
+        # Allow passing in -1 (or any negative number) to get all rows
+        limit = None if self.config.args.limit < 0 else self.config.args.limit
+
+        model_context = generate_runtime_model_context(
+            compiled_node, self.config, manifest
+        )
+
+        # DVT: Wrap in subquery to avoid double-LIMIT
+        compiled_code = model_context["compiled_code"]
+        compiled_code = f"SELECT * FROM ({compiled_code}) AS _dvt_show_subq"
+
+        compiled_node.compiled_code = self.adapter.execute_macro(
+            macro_name="get_show_sql",
+            macro_resolver=manifest,
+            context_override=model_context,
+            kwargs={
+                "compiled_code": compiled_code,
+                "sql_header": model_context["config"].get("sql_header"),
+                "limit": limit,
+            },
+        )
+        adapter_response, execute_result = self.adapter.execute(
+            compiled_node.compiled_code, fetch=True
+        )
+
+        end_time = time.time()
+
+        return RunResult(
+            node=compiled_node,
+            status=RunStatus.Success,
+            timing=[],
+            thread_id=threading.current_thread().name,
+            execution_time=end_time - start_time,
+            message=None,
+            adapter_response=adapter_response.to_dict(),
+            agate_table=execute_result,
+            failures=None,
+            batch_results=None,
+        )
 
 
 class DvtShowTask(ShowTask):
@@ -110,8 +170,8 @@ class DvtShowTask(ShowTask):
                     # If adapter creation fails, fall back to default ShowRunner
                     pass
 
-        # Default: same-target pushdown — standard ShowRunner with DvtCompiler
-        # for cross-dialect transpilation support
-        runner = ShowRunner(self.config, adapter, node, run_count, num_nodes)
+        # Default: same-target pushdown — DvtShowRunner (subquery-wrapping)
+        # with DvtCompiler for cross-dialect transpilation support
+        runner = DvtShowRunner(self.config, adapter, node, run_count, num_nodes)
         runner.compiler = DvtCompiler(self.config)
         return runner

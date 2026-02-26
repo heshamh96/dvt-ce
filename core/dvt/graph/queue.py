@@ -9,6 +9,7 @@ from dvt.contracts.graph.nodes import (
     Exposure,
     GraphMemberNode,
     Metric,
+    ModelNode,
     SourceDefinition,
 )
 from dvt.node_types import NodeType
@@ -33,7 +34,9 @@ class GraphQueue:
         preserve_edges: bool = True,
     ) -> None:
         # 'create_empty_copy' returns a copy of the graph G with all of the edges removed, and leaves nodes intact.
-        self.graph = graph if preserve_edges else nx.classes.function.create_empty_copy(graph)
+        self.graph = (
+            graph if preserve_edges else nx.classes.function.create_empty_copy(graph)
+        )
         self.manifest = manifest
         self._selected = selected
         # store the queue as a priority queue.
@@ -41,6 +44,7 @@ class GraphQueue:
         # things that have been popped off the queue but not finished
         # and worker thread reservations
         self.in_progress: Set[UniqueId] = set()
+        self.in_progress_microbatch: Set[UniqueId] = set()
         # things that are in the queue
         self.queued: Set[UniqueId] = set()
         # this lock controls most things
@@ -106,7 +110,9 @@ class GraphQueue:
             A dictionary consisting of `node name`:`score` pairs.
         """
         # split graph by connected subgraphs
-        subgraphs = (graph.subgraph(x) for x in nx.connected_components(nx.Graph(graph)))
+        subgraphs = (
+            graph.subgraph(x) for x in nx.connected_components(nx.Graph(graph))
+        )
 
         # score all nodes in all subgraphs
         scores = {}
@@ -118,7 +124,9 @@ class GraphQueue:
 
         return scores
 
-    def get(self, block: bool = True, timeout: Optional[float] = None) -> GraphMemberNode:
+    def get(
+        self, block: bool = True, timeout: Optional[float] = None
+    ) -> GraphMemberNode:
         """Get a node off the inner priority queue. By default, this blocks.
 
         This takes the lock, but only for part of it.
@@ -131,9 +139,14 @@ class GraphQueue:
         exceptions.
         """
         _, node_id = self.inner.get(block=block, timeout=timeout)
+        node = self.manifest.expect(node_id)
+        is_microbatch = (
+            isinstance(node, ModelNode)
+            and node.config.incremental_strategy == "microbatch"
+        )
         with self.lock:
-            self._mark_in_progress(node_id)
-        return self.manifest.expect(node_id)
+            self._mark_in_progress(node_id, is_microbatch=is_microbatch)
+        return node
 
     def __len__(self) -> int:
         """The length of the queue is the number of tasks left for the queue to
@@ -182,21 +195,26 @@ class GraphQueue:
         """
         with self.lock:
             self.in_progress.remove(node_id)
+            if node_id in self.in_progress_microbatch:
+                self.in_progress_microbatch.remove(node_id)
             successors = list(self.graph.successors(node_id))
             self.graph.remove_node(node_id)
             self._find_new_additions(successors)
             self.inner.task_done()
             self.some_task_done.notify_all()
 
-    def _mark_in_progress(self, node_id: UniqueId) -> None:
+    def _mark_in_progress(self, node_id: UniqueId, is_microbatch: bool = False) -> None:
         """Mark the node as 'in progress'.
 
         Callers must hold the lock.
 
         :param str node_id: The node ID to mark as in progress.
+        :param bool is_microbatch: If True, also track in in_progress_microbatch.
         """
         self.queued.remove(node_id)
         self.in_progress.add(node_id)
+        if is_microbatch:
+            self.in_progress_microbatch.add(node_id)
 
     def join(self) -> None:
         """Join the queue. Blocks until all tasks are marked as done.
