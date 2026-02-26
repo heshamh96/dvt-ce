@@ -3,7 +3,6 @@ import importlib
 import importlib.util
 import json
 import os
-from importlib import metadata as importlib_metadata
 from typing import Iterator, List, Optional, Tuple
 
 import requests
@@ -11,6 +10,8 @@ import requests
 import dbt_common.semver as semver
 from dvt.__version__ import version as __version_string
 from dbt_common.ui import green, yellow
+
+from dvt.dvt_tasks.lib.compute_version import get_compute_msg as _get_compute_msg
 
 PYPI_VERSION_URL = "https://pypi.org/pypi/dvt-core/json"
 
@@ -130,27 +131,6 @@ def _get_plugins_msg() -> str:
             "  https://docs.getdbt.com/docs/installation"
         )
         msg_lines += ["", update_msg]
-
-    return "\n".join(msg_lines)
-
-
-def _get_compute_msg() -> Optional[str]:
-    """Get compute engine version information (e.g., pyspark)."""
-    compute_engines = []
-
-    # Check for pyspark
-    try:
-        pyspark_version = importlib_metadata.version("pyspark")
-        compute_engines.append(("pyspark", pyspark_version))
-    except importlib_metadata.PackageNotFoundError:
-        pass
-
-    if not compute_engines:
-        return None
-
-    msg_lines = ["Compute:"]
-    for name, version in compute_engines:
-        msg_lines.append(f"  - {name}: {version}")
 
     return "\n".join(msg_lines)
 

@@ -177,21 +177,13 @@ class Linker:
             if dependency in manifest.nodes:
                 self.dependency(node.unique_id, (manifest.nodes[dependency].unique_id))
             elif dependency in manifest.sources:
-                self.dependency(
-                    node.unique_id, (manifest.sources[dependency].unique_id)
-                )
+                self.dependency(node.unique_id, (manifest.sources[dependency].unique_id))
             elif dependency in manifest.metrics:
-                self.dependency(
-                    node.unique_id, (manifest.metrics[dependency].unique_id)
-                )
+                self.dependency(node.unique_id, (manifest.metrics[dependency].unique_id))
             elif dependency in manifest.semantic_models:
-                self.dependency(
-                    node.unique_id, (manifest.semantic_models[dependency].unique_id)
-                )
+                self.dependency(node.unique_id, (manifest.semantic_models[dependency].unique_id))
             elif dependency in manifest.functions:
-                self.dependency(
-                    node.unique_id, (manifest.functions[dependency].unique_id)
-                )
+                self.dependency(node.unique_id, (manifest.functions[dependency].unique_id))
             else:
                 raise GraphDependencyNotFoundError(node, dependency)
 
@@ -289,9 +281,7 @@ class Linker:
                 and manifest.nodes[node_id].resource_type != NodeType.Test
             ):
                 # Get *everything* upstream of the node
-                all_upstream_nodes = nx.traversal.bfs_tree(
-                    self.graph, node_id, reverse=True
-                )
+                all_upstream_nodes = nx.traversal.bfs_tree(self.graph, node_id, reverse=True)
                 # Get the set of upstream nodes not including the current node.
                 upstream_nodes = set([n for n in all_upstream_nodes if n != node_id])
 
@@ -308,17 +298,13 @@ class Linker:
                     # relationship tests). Test nodes do not distinguish
                     # between what node the test is "testing" and what
                     # node(s) it depends on.
-                    test_depends_on = set(
-                        manifest.nodes[upstream_test].depends_on_nodes
-                    )
+                    test_depends_on = set(manifest.nodes[upstream_test].depends_on_nodes)
 
                     # If the set of nodes that an upstream test depends on
                     # is a subset of all upstream nodes of the current node,
                     # add an edge from the upstream test to the current node.
                     if test_depends_on.issubset(upstream_nodes):
-                        self.graph.add_edge(
-                            upstream_test, node_id, edge_type="parent_test"
-                        )
+                        self.graph.add_edge(upstream_test, node_id, edge_type="parent_test")
 
     def add_test_edges_2(self, manifest: Manifest):
         graph = self.graph
@@ -422,9 +408,7 @@ class Linker:
                     new_awaits_for_succs.add((test_id, tuple(deps)))
 
             for succ_id in [
-                s
-                for s in graph.successors(curr_details.node_id)
-                if s in executable_nodes
+                s for s in graph.successors(curr_details.node_id) if s in executable_nodes
             ]:
                 suc_details = details.get(succ_id, None)
                 if suc_details is None:
@@ -442,9 +426,7 @@ class Linker:
                     if len(suc_details.awaits_tests) > 0:
                         removes = set()
                         for awt in suc_details.awaits_tests:
-                            if not any(
-                                True for a in awt[1] if a not in suc_details.ancestors
-                            ):
+                            if not any(True for a in awt[1] if a not in suc_details.ancestors):
                                 removes.add(awt)
                                 new_edges.append((awt[0], succ_id))
 
@@ -476,9 +458,7 @@ class Linker:
         for node_index, node in graph_nodes.items():
             successors = [index_dict[n] for n in self.graph.successors(node["name"])]
             if successors:
-                node["succ"] = [
-                    index_dict[n] for n in self.graph.successors(node["name"])
-                ]
+                node["succ"] = [index_dict[n] for n in self.graph.successors(node["name"])]
 
         return graph_nodes
 
@@ -486,6 +466,10 @@ class Linker:
 class Compiler:
     def __init__(self, config) -> None:
         self.config = config
+        # Set of unique_ids for nodes selected in the current run.
+        # Used to determine whether FK constraint targets should use
+        # deferred relations or current relations during compilation.
+        self.selected_node_ids: Set[str] = set()
 
     def initialize(self):
         make_directory(self.config.project_target_path)
@@ -625,10 +609,7 @@ class Compiler:
         if extra_context is None:
             extra_context = {}
 
-        if (
-            node.language == ModelLanguage.python
-            and node.resource_type == NodeType.Model
-        ):
+        if node.language == ModelLanguage.python and node.resource_type == NodeType.Model:
             context = self._create_node_context(node, manifest, extra_context)
 
             postfix = jinja.get_rendered(
@@ -665,10 +646,8 @@ class Compiler:
         if isinstance(node, ModelNode):
             for constraint in node.all_constraints:
                 if constraint.type == ConstraintType.foreign_key and constraint.to:
-                    constraint.to = (
-                        self._compile_relation_for_foreign_key_constraint_to(
-                            manifest, node, constraint.to
-                        )
+                    constraint.to = self._compile_relation_for_foreign_key_constraint_to(
+                        manifest, node, constraint.to
                     )
 
         return node
@@ -686,16 +665,20 @@ class Compiler:
 
         adapter = get_adapter(self.config)
 
+        # Use deferred relation only if:
+        # 1. The foreign key node has a defer_relation (from previous state)
+        # 2. The --defer flag is set
+        # 3. The foreign key node is NOT being built in the current run
+        #    (i.e., not in selected_node_ids)
+        # This mirrors the logic in RuntimeRefResolver.create_relation() for
+        # model body refs, ensuring FK constraints behave consistently.
         if (
             hasattr(foreign_key_node, "defer_relation")
             and foreign_key_node.defer_relation
             and self.config.args.defer
+            and foreign_key_node.unique_id not in self.selected_node_ids
         ):
-            return str(
-                adapter.Relation.create_from(
-                    self.config, foreign_key_node.defer_relation
-                )
-            )
+            return str(adapter.Relation.create_from(self.config, foreign_key_node.defer_relation))
         else:
             return str(adapter.Relation.create_from(self.config, foreign_key_node))
 
@@ -727,9 +710,7 @@ class Compiler:
         ) as out_stream:
             try:
                 out_stream.write(json.dumps(summaries))
-            except (
-                Exception
-            ) as e:  # This is non-essential information, so merely note failures.
+            except Exception as e:  # This is non-essential information, so merely note failures.
                 fire_event(
                     Note(
                         msg=f"An error was encountered writing the graph summary information: {e}"
@@ -770,9 +751,7 @@ class Compiler:
             node.compiled_path = node.get_target_write_path(
                 self.config.target_path, "compiled", split_suffix
             )
-            node.write_node(
-                self.config.project_root, node.compiled_path, node.compiled_code
-            )
+            node.write_node(self.config.project_root, node.compiled_path, node.compiled_code)
         return node
 
     def compile_node(
@@ -847,11 +826,7 @@ def inject_ctes_into_sql(sql: str, ctes: List[InjectedCTE]) -> str:
     for token in parsed.tokens:
         if token.is_keyword and token.normalized == "WITH":
             with_stmt = token
-        elif (
-            token.is_keyword
-            and token.normalized == "RECURSIVE"
-            and with_stmt is not None
-        ):
+        elif token.is_keyword and token.normalized == "RECURSIVE" and with_stmt is not None:
             with_stmt = token
             break
         elif not token.is_whitespace and with_stmt is not None:

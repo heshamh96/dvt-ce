@@ -42,7 +42,7 @@ def _get_task_dict():
     from dvt.dvt_tasks.dvt_seed import DvtSeedTask
     from dvt.task.clone import CloneTask
     from dvt.dvt_tasks.dvt_compile import DvtCompileTask as CompileTask
-    from dvt.task.docs.generate import GenerateTask
+    from dvt.dvt_tasks.dvt_docs import DvtDocsGenerateTask
     from dvt.task.run_operation import RunOperationTask
     from dvt.task.snapshot import SnapshotTask
     from dvt.task.test import TestTask
@@ -51,7 +51,7 @@ def _get_task_dict():
         "build": DvtBuildTask,
         "compile": CompileTask,
         "clone": CloneTask,
-        "generate": GenerateTask,
+        "generate": DvtDocsGenerateTask,
         "seed": DvtSeedTask,
         "snapshot": SnapshotTask,
         "test": TestTask,
