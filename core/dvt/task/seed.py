@@ -42,9 +42,7 @@ class SeedRunner(ModelRunner):
     def print_result_line(self, result):
         model = result.node
         group = group_lookup.get(model.unique_id)
-        level = (
-            EventLevel.ERROR if result.status == NodeStatus.Error else EventLevel.INFO
-        )
+        level = EventLevel.ERROR if result.status == NodeStatus.Error else EventLevel.INFO
         fire_event(
             LogSeedResult(
                 status=result.status,
@@ -67,9 +65,7 @@ class SeedTask(RunTask):
 
     def get_node_selector(self):
         if self.manifest is None or self.graph is None:
-            raise DbtInternalError(
-                "manifest and graph must be set to get perform node selection"
-            )
+            raise DbtInternalError("manifest and graph must be set to get perform node selection")
         return ResourceTypeSelector(
             graph=self.graph,
             manifest=self.manifest,

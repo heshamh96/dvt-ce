@@ -23,12 +23,9 @@ class CleanTask(BaseTask):
         """
         project_dir = move_to_nearest_project_dir(self.args.project_dir)
 
-        potential_clean_paths = set(
-            Path(p).resolve() for p in self.project.clean_targets
-        )
+        potential_clean_paths = set(Path(p).resolve() for p in self.project.clean_targets)
         source_paths = set(
-            Path(p).resolve()
-            for p in (*self.project.all_source_paths, *self.project.test_paths)
+            Path(p).resolve() for p in (*self.project.all_source_paths, *self.project.test_paths)
         )
         clean_paths = potential_clean_paths.difference(source_paths)
 
