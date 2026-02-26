@@ -28,7 +28,7 @@ class TestCLIToolInfo:
 
     def test_registry_has_all_tools(self):
         """Registry should contain all 5 expected tools."""
-        from dvt.task.cli_tools import CLI_TOOL_REGISTRY
+        from dvt.dvt_tasks.lib.cli_tools import CLI_TOOL_REGISTRY
 
         tool_names = [t.tool_name for t in CLI_TOOL_REGISTRY]
         assert "psql" in tool_names
@@ -40,7 +40,7 @@ class TestCLIToolInfo:
 
     def test_psql_compatible_adapters(self):
         """psql should cover postgres and related adapters."""
-        from dvt.task.cli_tools import CLI_TOOL_REGISTRY
+        from dvt.dvt_tasks.lib.cli_tools import CLI_TOOL_REGISTRY
 
         psql_tool = next(t for t in CLI_TOOL_REGISTRY if t.tool_name == "psql")
         assert "postgres" in psql_tool.compatible_adapters
@@ -50,7 +50,7 @@ class TestCLIToolInfo:
 
     def test_mysql_compatible_adapters(self):
         """mysql should cover mysql and related adapters."""
-        from dvt.task.cli_tools import CLI_TOOL_REGISTRY
+        from dvt.dvt_tasks.lib.cli_tools import CLI_TOOL_REGISTRY
 
         mysql_tool = next(t for t in CLI_TOOL_REGISTRY if t.tool_name == "mysql")
         assert "mysql" in mysql_tool.compatible_adapters
@@ -59,7 +59,7 @@ class TestCLIToolInfo:
 
     def test_each_tool_has_install_instructions(self):
         """Every tool should have at least one install instruction."""
-        from dvt.task.cli_tools import CLI_TOOL_REGISTRY
+        from dvt.dvt_tasks.lib.cli_tools import CLI_TOOL_REGISTRY
 
         for tool in CLI_TOOL_REGISTRY:
             assert len(tool.install_instructions) > 0, (
@@ -68,7 +68,7 @@ class TestCLIToolInfo:
 
     def test_each_tool_has_docs_url(self):
         """Every tool should have a docs URL."""
-        from dvt.task.cli_tools import CLI_TOOL_REGISTRY
+        from dvt.dvt_tasks.lib.cli_tools import CLI_TOOL_REGISTRY
 
         for tool in CLI_TOOL_REGISTRY:
             assert tool.docs_url.startswith("http"), (
@@ -79,11 +79,11 @@ class TestCLIToolInfo:
 class TestDetectCLITools:
     """Tests for detect_cli_tools function."""
 
-    @patch("dvt.task.cli_tools.shutil.which")
-    @patch("dvt.task.cli_tools._get_tool_version")
+    @patch("dvt.dvt_tasks.lib.cli_tools.shutil.which")
+    @patch("dvt.dvt_tasks.lib.cli_tools._get_tool_version")
     def test_detects_found_tool(self, mock_version, mock_which):
         """Should detect a tool that is on PATH."""
-        from dvt.task.cli_tools import detect_cli_tools
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools
 
         mock_which.return_value = "/usr/bin/psql"
         mock_version.return_value = "psql (PostgreSQL) 16.1"
@@ -96,10 +96,10 @@ class TestDetectCLITools:
         assert results[0].version == "psql (PostgreSQL) 16.1"
         assert results[0].tool.tool_name == "psql"
 
-    @patch("dvt.task.cli_tools.shutil.which")
+    @patch("dvt.dvt_tasks.lib.cli_tools.shutil.which")
     def test_detects_missing_tool(self, mock_which):
         """Should report missing tool when not on PATH."""
-        from dvt.task.cli_tools import detect_cli_tools
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools
 
         mock_which.return_value = None
 
@@ -109,21 +109,21 @@ class TestDetectCLITools:
         assert results[0].found is False
         assert results[0].path is None
 
-    @patch("dvt.task.cli_tools.shutil.which")
+    @patch("dvt.dvt_tasks.lib.cli_tools.shutil.which")
     def test_skips_cloud_adapters(self, mock_which):
         """Should return empty for cloud-only adapters."""
-        from dvt.task.cli_tools import detect_cli_tools
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools
 
         results = detect_cli_tools(["snowflake", "bigquery", "redshift"])
 
         assert len(results) == 0
         mock_which.assert_not_called()
 
-    @patch("dvt.task.cli_tools.shutil.which")
-    @patch("dvt.task.cli_tools._get_tool_version")
+    @patch("dvt.dvt_tasks.lib.cli_tools.shutil.which")
+    @patch("dvt.dvt_tasks.lib.cli_tools._get_tool_version")
     def test_no_duplicate_checks(self, mock_version, mock_which):
         """Should check psql only once even if multiple postgres-compatible adapters."""
-        from dvt.task.cli_tools import detect_cli_tools
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools
 
         mock_which.return_value = "/usr/bin/psql"
         mock_version.return_value = "psql 16"
@@ -132,11 +132,11 @@ class TestDetectCLITools:
 
         assert len(results) == 1  # Only one check for psql
 
-    @patch("dvt.task.cli_tools.shutil.which")
-    @patch("dvt.task.cli_tools._get_tool_version")
+    @patch("dvt.dvt_tasks.lib.cli_tools.shutil.which")
+    @patch("dvt.dvt_tasks.lib.cli_tools._get_tool_version")
     def test_multiple_adapters_multiple_tools(self, mock_version, mock_which):
         """Should detect multiple tools for multiple adapter types."""
-        from dvt.task.cli_tools import detect_cli_tools
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools
 
         def which_side_effect(name):
             return {
@@ -155,10 +155,10 @@ class TestDetectCLITools:
         assert psql_result.found is True
         assert mysql_result.found is False
 
-    @patch("dvt.task.cli_tools.shutil.which")
+    @patch("dvt.dvt_tasks.lib.cli_tools.shutil.which")
     def test_empty_adapter_list(self, mock_which):
         """Should return empty for empty adapter list."""
-        from dvt.task.cli_tools import detect_cli_tools
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools
 
         results = detect_cli_tools([])
         assert len(results) == 0
@@ -169,14 +169,14 @@ class TestFormatCLIToolReport:
 
     def test_empty_results(self):
         """Should show 'no adapters' message for empty results."""
-        from dvt.task.cli_tools import format_cli_tool_report
+        from dvt.dvt_tasks.lib.cli_tools import format_cli_tool_report
 
         report = format_cli_tool_report([])
         assert "No on-prem database adapters" in report
 
     def test_found_tool_in_report(self):
         """Should show 'found' for detected tools."""
-        from dvt.task.cli_tools import (
+        from dvt.dvt_tasks.lib.cli_tools import (
             CLIToolInfo,
             CLIToolStatus,
             format_cli_tool_report,
@@ -202,7 +202,7 @@ class TestFormatCLIToolReport:
 
     def test_missing_tool_shows_install_instructions(self):
         """Should show install instructions for missing tools."""
-        from dvt.task.cli_tools import (
+        from dvt.dvt_tasks.lib.cli_tools import (
             CLIToolInfo,
             CLIToolStatus,
             format_cli_tool_report,
@@ -225,7 +225,7 @@ class TestFormatCLIToolReport:
 
     def test_report_has_footer(self):
         """Report should always end with the JDBC fallback note."""
-        from dvt.task.cli_tools import (
+        from dvt.dvt_tasks.lib.cli_tools import (
             CLIToolInfo,
             CLIToolStatus,
             format_cli_tool_report,
@@ -249,18 +249,18 @@ class TestFormatCLIToolReport:
 class TestPlatformDetection:
     """Tests for _detect_platform helper."""
 
-    @patch("dvt.task.cli_tools.platform.system")
+    @patch("dvt.dvt_tasks.lib.cli_tools.platform.system")
     def test_darwin_returns_macos(self, mock_system):
         """Should return 'macOS' for Darwin."""
-        from dvt.task.cli_tools import _detect_platform
+        from dvt.dvt_tasks.lib.cli_tools import _detect_platform
 
         mock_system.return_value = "Darwin"
         assert _detect_platform() == "macOS"
 
-    @patch("dvt.task.cli_tools.platform.system")
+    @patch("dvt.dvt_tasks.lib.cli_tools.platform.system")
     def test_linux_with_ubuntu(self, mock_system):
         """Should return 'Debian/Ubuntu' for Ubuntu."""
-        from dvt.task.cli_tools import _detect_platform
+        from dvt.dvt_tasks.lib.cli_tools import _detect_platform
 
         mock_system.return_value = "Linux"
         os_release = "NAME=Ubuntu\nVERSION_ID=22.04\nID=ubuntu\n"

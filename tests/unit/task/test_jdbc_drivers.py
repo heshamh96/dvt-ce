@@ -1,11 +1,11 @@
-"""Unit tests for adapter–JDBC driver registry and download (core/dvt/task/jdbc_drivers)."""
+"""Unit tests for adapter–JDBC driver registry and download (core/dvt/dvt_tasks/lib/jdbc_drivers)."""
 
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
-from dvt.task.jdbc_drivers import (
+from dvt.dvt_tasks.lib.jdbc_drivers import (
     ADAPTER_TO_JDBC_DRIVERS,
     download_jdbc_jars,
     get_jdbc_drivers_for_adapters,
@@ -68,7 +68,9 @@ class TestDownloadJdbcJars:
     def test_download_creates_jar_in_dest_dir(self, tmp_path):
         events = []
 
-        with mock.patch("dvt.task.jdbc_drivers.urllib.request.urlopen") as urlopen:
+        with mock.patch(
+            "dvt.dvt_tasks.lib.jdbc_drivers.urllib.request.urlopen"
+        ) as urlopen:
             resp = mock.Mock()
             resp.status = 200
             resp.read.return_value = b"fake jar content"
@@ -93,7 +95,9 @@ class TestDownloadJdbcJars:
         jar_path = tmp_path / "postgresql-42.7.3.jar"
         jar_path.write_bytes(b"existing")
 
-        with mock.patch("dvt.task.jdbc_drivers.urllib.request.urlopen") as urlopen:
+        with mock.patch(
+            "dvt.dvt_tasks.lib.jdbc_drivers.urllib.request.urlopen"
+        ) as urlopen:
             count = download_jdbc_jars(
                 [("org.postgresql", "postgresql", "42.7.3")],
                 tmp_path,
@@ -109,7 +113,9 @@ class TestDownloadJdbcJars:
 
         events = []
 
-        with mock.patch("dvt.task.jdbc_drivers.urllib.request.urlopen") as urlopen:
+        with mock.patch(
+            "dvt.dvt_tasks.lib.jdbc_drivers.urllib.request.urlopen"
+        ) as urlopen:
             urlopen.side_effect = urllib.error.HTTPError(
                 None, 404, "Not Found", None, None
             )
@@ -127,7 +133,9 @@ class TestDownloadJdbcJars:
     def test_multiple_drivers_download_both(self, tmp_path):
         events = []
 
-        with mock.patch("dvt.task.jdbc_drivers.urllib.request.urlopen") as urlopen:
+        with mock.patch(
+            "dvt.dvt_tasks.lib.jdbc_drivers.urllib.request.urlopen"
+        ) as urlopen:
             resp = mock.Mock()
             resp.status = 200
             resp.read.return_value = b"jar"

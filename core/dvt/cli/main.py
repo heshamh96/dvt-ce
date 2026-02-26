@@ -251,9 +251,9 @@ def clean(ctx, **kwargs):
     Use --older-than to clean only files older than a duration (e.g., '24h', '7d').
     Use --optimize to run Delta OPTIMIZE + VACUUM on staging tables (skips dbt clean).
     """
-    from dvt.task.clean import CleanTask
+    from dvt.dvt_tasks.dvt_clean import DvtCleanTask
 
-    with CleanTask(ctx.obj["flags"], ctx.obj["project"]) as task:
+    with DvtCleanTask(ctx.obj["flags"], ctx.obj["project"]) as task:
         results = task.run()
         success = task.interpret_results(results)
     return results, success
@@ -441,9 +441,9 @@ def show(ctx, **kwargs):
 @requires.preflight
 def debug(ctx, **kwargs):
     """Show DVT configuration: all targets, computes, and buckets. Use --debug-target, --debug-compute, or --debug-bucket to debug specific items. Use --connection <target> to test a database connection."""
-    from dvt.task.debug import DebugTask
+    from dvt.dvt_tasks.dvt_debug import DvtDebugTask
 
-    task = DebugTask(
+    task = DvtDebugTask(
         ctx.obj["flags"],
     )
 
@@ -525,9 +525,9 @@ def init(ctx, **kwargs):
 @p.sync_python_env
 def sync(ctx, **kwargs):
     """Sync project env: install adapters and pyspark from dbt_project.yml, profiles, and computes.yml."""
-    from dvt.task.sync import SyncTask
+    from dvt.dvt_tasks.dvt_sync import DvtSyncTask
 
-    with SyncTask(ctx.obj["flags"]) as task:
+    with DvtSyncTask(ctx.obj["flags"]) as task:
         results, success = task.run()
     return results, success
 

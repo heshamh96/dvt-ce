@@ -62,7 +62,7 @@ class DvtSeedTask(RunTask):
 
     def run(self) -> RunExecutionResult:
         """Run the seed task, checking for PySpark first."""
-        from dvt.task.spark_seed import is_spark_available
+        from dvt.dvt_tasks.lib.spark_seed import is_spark_available
 
         if not is_spark_available():
             raise PySparkNotInstalledError()
@@ -117,7 +117,7 @@ class DvtSeedTask(RunTask):
 
     def get_runner_type(self, _) -> Optional[Type[BaseRunner]]:
         """Get the Spark-based seed runner."""
-        from dvt.task.spark_seed import SparkSeedRunner
+        from dvt.dvt_tasks.lib.spark_seed import SparkSeedRunner
 
         compute_name = getattr(self.args, "COMPUTE", None) or getattr(
             self.args, "compute", None

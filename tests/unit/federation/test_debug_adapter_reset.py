@@ -18,15 +18,15 @@ import pytest
 class TestDebugAdapterReset:
     """Verify attempt_connection resets adapters before registering."""
 
-    @patch("dvt.task.debug.get_adapter")
-    @patch("dvt.task.debug.register_adapter")
-    @patch("dvt.task.debug.reset_adapters")
-    @patch("dvt.task.debug.get_mp_context")
+    @patch("dvt.dvt_tasks.dvt_debug.get_adapter")
+    @patch("dvt.dvt_tasks.dvt_debug.register_adapter")
+    @patch("dvt.dvt_tasks.dvt_debug.reset_adapters")
+    @patch("dvt.dvt_tasks.dvt_debug.get_mp_context")
     def test_reset_called_before_register(
         self, mock_mp_ctx, mock_reset, mock_register, mock_get_adapter
     ):
         """reset_adapters() must be called before register_adapter()."""
-        from dvt.task.debug import DebugTask
+        from dvt.dvt_tasks.dvt_debug import DvtDebugTask
 
         mock_profile = MagicMock()
         mock_adapter = MagicMock()
@@ -37,7 +37,7 @@ class TestDebugAdapterReset:
             return_value=False
         )
 
-        result = DebugTask.attempt_connection(mock_profile)
+        result = DvtDebugTask.attempt_connection(mock_profile)
 
         # Should have called reset before register
         mock_reset.assert_called_once()
@@ -50,15 +50,15 @@ class TestDebugAdapterReset:
         # No error on success
         assert result is None
 
-    @patch("dvt.task.debug.get_adapter")
-    @patch("dvt.task.debug.register_adapter")
-    @patch("dvt.task.debug.reset_adapters")
-    @patch("dvt.task.debug.get_mp_context")
+    @patch("dvt.dvt_tasks.dvt_debug.get_adapter")
+    @patch("dvt.dvt_tasks.dvt_debug.register_adapter")
+    @patch("dvt.dvt_tasks.dvt_debug.reset_adapters")
+    @patch("dvt.dvt_tasks.dvt_debug.get_mp_context")
     def test_reset_ensures_fresh_adapter_per_target(
         self, mock_mp_ctx, mock_reset, mock_register, mock_get_adapter
     ):
         """Two consecutive calls should each get a fresh adapter."""
-        from dvt.task.debug import DebugTask
+        from dvt.dvt_tasks.dvt_debug import DvtDebugTask
 
         profile_a = MagicMock()
         profile_a.credentials.type = "snowflake"
@@ -74,22 +74,22 @@ class TestDebugAdapterReset:
         adapter_b.connection_named.return_value.__enter__ = MagicMock()
         adapter_b.connection_named.return_value.__exit__ = MagicMock(return_value=False)
 
-        DebugTask.attempt_connection(profile_a)
-        DebugTask.attempt_connection(profile_b)
+        DvtDebugTask.attempt_connection(profile_a)
+        DvtDebugTask.attempt_connection(profile_b)
 
         # reset_adapters must have been called twice (once per target)
         assert mock_reset.call_count == 2
         assert mock_register.call_count == 2
 
-    @patch("dvt.task.debug.get_adapter")
-    @patch("dvt.task.debug.register_adapter")
-    @patch("dvt.task.debug.reset_adapters")
-    @patch("dvt.task.debug.get_mp_context")
+    @patch("dvt.dvt_tasks.dvt_debug.get_adapter")
+    @patch("dvt.dvt_tasks.dvt_debug.register_adapter")
+    @patch("dvt.dvt_tasks.dvt_debug.reset_adapters")
+    @patch("dvt.dvt_tasks.dvt_debug.get_mp_context")
     def test_connection_error_returned(
         self, mock_mp_ctx, mock_reset, mock_register, mock_get_adapter
     ):
         """Connection errors are returned as strings, not raised."""
-        from dvt.task.debug import DebugTask
+        from dvt.dvt_tasks.dvt_debug import DvtDebugTask
 
         mock_profile = MagicMock()
         mock_adapter = MagicMock()
@@ -102,7 +102,7 @@ class TestDebugAdapterReset:
         )
         mock_adapter.debug_query.side_effect = Exception("Connection refused")
 
-        result = DebugTask.attempt_connection(mock_profile)
+        result = DvtDebugTask.attempt_connection(mock_profile)
 
         assert result is not None
         assert "Connection refused" in result

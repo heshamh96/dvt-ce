@@ -1,11 +1,12 @@
-"""Unit tests for dvt sync task and JDBC integration (core/dvt/task/sync)."""
+"""Unit tests for dvt sync task and JDBC integration (core/dvt/dvt_tasks/dvt_sync)."""
+
 from pathlib import Path
 from unittest import mock
 
 import pytest
 
 from dvt.cli.flags import Flags
-from dvt.task.sync import SyncTask
+from dvt.dvt_tasks.dvt_sync import DvtSyncTask
 
 
 @pytest.fixture
@@ -18,21 +19,21 @@ def mock_flags(tmp_path):
     return flags
 
 
-class TestSyncTaskJdbcIntegration:
+class TestDvtSyncTaskJdbcIntegration:
     """Sync task calls JDBC driver resolution and download for profile adapters."""
 
-    @mock.patch("dvt.task.sync.download_jdbc_jars")
-    @mock.patch("dvt.task.sync.get_jdbc_drivers_for_adapters")
-    @mock.patch("dvt.task.sync._get_active_pyspark_version", return_value=None)
-    @mock.patch("dvt.task.sync._run_uv_pip", return_value=True)
-    @mock.patch("dvt.task.sync._run_pip", return_value=True)
-    @mock.patch("dvt.task.sync._detect_package_manager", return_value="pip")
-    @mock.patch("dvt.task.sync._get_require_adapters", return_value={})
-    @mock.patch("dvt.task.sync._get_adapter_types_from_profile")
-    @mock.patch("dvt.task.sync._get_profile_name")
-    @mock.patch("dvt.task.sync._get_env_python")
-    @mock.patch("dvt.task.sync._find_project_env")
-    @mock.patch("dvt.task.sync.get_nearest_project_dir")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.download_jdbc_jars")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.get_jdbc_drivers_for_adapters")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_active_pyspark_version", return_value=None)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_uv_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._detect_package_manager", return_value="pip")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_require_adapters", return_value={})
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_adapter_types_from_profile")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_profile_name")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_env_python")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._find_project_env")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.get_nearest_project_dir")
     def test_sync_calls_jdbc_download_for_profile_adapters(
         self,
         mock_get_project_dir,
@@ -72,7 +73,7 @@ class TestSyncTaskJdbcIntegration:
         profiles_dir = Path(mock_flags.PROFILES_DIR)
         profiles_dir.mkdir(parents=True, exist_ok=True)
 
-        task = SyncTask(mock_flags)
+        task = DvtSyncTask(mock_flags)
         task.run()
 
         mock_get_jdbc_drivers.assert_called_once_with(["postgres", "snowflake"])
@@ -84,21 +85,24 @@ class TestSyncTaskJdbcIntegration:
         ]
         # JDBC jars always go to canonical DVT home ~/.dvt/.jdbc_jars
         from dvt.config.user_config import get_jdbc_drivers_dir
+
         assert call_args[0][1] == get_jdbc_drivers_dir(None)
         assert call_args[1]["on_event"] is not None
 
-    @mock.patch("dvt.task.sync.download_jdbc_jars")
-    @mock.patch("dvt.task.sync.get_jdbc_drivers_for_adapters", return_value=[])
-    @mock.patch("dvt.task.sync._get_active_pyspark_version", return_value=None)
-    @mock.patch("dvt.task.sync._run_uv_pip", return_value=True)
-    @mock.patch("dvt.task.sync._run_pip", return_value=True)
-    @mock.patch("dvt.task.sync._detect_package_manager", return_value="pip")
-    @mock.patch("dvt.task.sync._get_require_adapters", return_value={})
-    @mock.patch("dvt.task.sync._get_adapter_types_from_profile", return_value=["spark"])
-    @mock.patch("dvt.task.sync._get_profile_name")
-    @mock.patch("dvt.task.sync._get_env_python")
-    @mock.patch("dvt.task.sync._find_project_env")
-    @mock.patch("dvt.task.sync.get_nearest_project_dir")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.download_jdbc_jars")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.get_jdbc_drivers_for_adapters", return_value=[])
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_active_pyspark_version", return_value=None)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_uv_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._detect_package_manager", return_value="pip")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_require_adapters", return_value={})
+    @mock.patch(
+        "dvt.dvt_tasks.dvt_sync._get_adapter_types_from_profile", return_value=["spark"]
+    )
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_profile_name")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_env_python")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._find_project_env")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.get_nearest_project_dir")
     def test_sync_does_not_call_download_when_no_jdbc_drivers_for_adapters(
         self,
         mock_get_project_dir,
@@ -130,24 +134,26 @@ class TestSyncTaskJdbcIntegration:
         mock_get_profile_name.return_value = "my_profile"
         Path(mock_flags.PROFILES_DIR).mkdir(parents=True, exist_ok=True)
 
-        task = SyncTask(mock_flags)
+        task = DvtSyncTask(mock_flags)
         task.run()
 
         mock_get_jdbc_drivers.assert_called_once_with(["spark"])
         mock_download_jdbc_jars.assert_not_called()
 
-    @mock.patch("dvt.task.sync.download_jdbc_jars")
-    @mock.patch("dvt.task.sync.get_jdbc_drivers_for_adapters", return_value=[])
-    @mock.patch("dvt.task.sync._get_active_pyspark_version", return_value=None)
-    @mock.patch("dvt.task.sync._run_uv_pip", return_value=True)
-    @mock.patch("dvt.task.sync._run_pip", return_value=True)
-    @mock.patch("dvt.task.sync._detect_package_manager", return_value="pip")
-    @mock.patch("dvt.task.sync._get_require_adapters", return_value={})
-    @mock.patch("dvt.task.sync._get_adapter_types_from_profile", return_value=[])
-    @mock.patch("dvt.task.sync._get_profile_name")
-    @mock.patch("dvt.task.sync._get_env_python")
-    @mock.patch("dvt.task.sync._find_project_env")
-    @mock.patch("dvt.task.sync.get_nearest_project_dir")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.download_jdbc_jars")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.get_jdbc_drivers_for_adapters", return_value=[])
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_active_pyspark_version", return_value=None)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_uv_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._run_pip", return_value=True)
+    @mock.patch("dvt.dvt_tasks.dvt_sync._detect_package_manager", return_value="pip")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_require_adapters", return_value={})
+    @mock.patch(
+        "dvt.dvt_tasks.dvt_sync._get_adapter_types_from_profile", return_value=[]
+    )
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_profile_name")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._get_env_python")
+    @mock.patch("dvt.dvt_tasks.dvt_sync._find_project_env")
+    @mock.patch("dvt.dvt_tasks.dvt_sync.get_nearest_project_dir")
     def test_sync_uses_python_env_flag_and_skips_in_project_lookup(
         self,
         mock_get_project_dir,
@@ -179,7 +185,7 @@ class TestSyncTaskJdbcIntegration:
         Path(mock_flags.PROFILES_DIR).mkdir(parents=True, exist_ok=True)
         mock_flags.PYTHON_ENV = str(explicit_venv)
 
-        task = SyncTask(mock_flags)
+        task = DvtSyncTask(mock_flags)
         task.run()
 
         mock_find_env.assert_not_called()

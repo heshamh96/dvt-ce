@@ -15,7 +15,7 @@ from dvt.dvt_tasks.dvt_run import DvtRunTask
 from dvt.node_types import NodeType
 from dvt.task.base import BaseRunner
 from dvt.task.build import BuildTask
-from dvt.task.spark_seed import SparkSeedRunner
+from dvt.dvt_tasks.lib.spark_seed import SparkSeedRunner
 
 
 class DvtBuildTask(DvtRunTask, BuildTask):

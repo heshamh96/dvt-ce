@@ -20,6 +20,7 @@ downloads/
 eggs/
 .eggs/
 lib/
+!core/dvt/dvt_tasks/lib/
 lib64/
 parts/
 sdist/

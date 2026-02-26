@@ -24,8 +24,11 @@ from dvt.config.user_config import (
     get_spark_jars_dir,
 )
 from dvt.task.base import BaseTask, get_nearest_project_dir
-from dvt.task.jdbc_drivers import download_jdbc_jars, get_jdbc_drivers_for_adapters
-from dvt.task.native_connectors import (
+from dvt.dvt_tasks.lib.jdbc_drivers import (
+    download_jdbc_jars,
+    get_jdbc_drivers_for_adapters,
+)
+from dvt.dvt_tasks.lib.native_connectors import (
     get_native_connectors_for_adapters,
     sync_native_connectors,
 )
@@ -502,7 +505,7 @@ def _print_java_installation_instructions(required_versions: List[str]) -> None:
     _sync_log(yellow("=" * 70))
 
 
-class SyncTask(BaseTask):
+class DvtSyncTask(BaseTask):
     """Install adapters and pyspark for the project. Resolves env; uses require-adapters and computes.yml."""
 
     def __init__(self, args: Flags) -> None:
@@ -752,7 +755,7 @@ class SyncTask(BaseTask):
 
         # 8) Cloud storage connector JARs: download Hadoop connectors for Spark
         # These enable Spark to read/write directly to S3, GCS, Azure
-        from dvt.task.cloud_connectors import (
+        from dvt.dvt_tasks.lib.cloud_connectors import (
             get_bucket_types_from_config,
             download_cloud_jars,
             detect_hadoop_version,
@@ -778,7 +781,7 @@ class SyncTask(BaseTask):
             )
 
         # 9) CLI tool detection: check for pipe-optimized data transfer tools
-        from dvt.task.cli_tools import detect_cli_tools, format_cli_tool_report
+        from dvt.dvt_tasks.lib.cli_tools import detect_cli_tools, format_cli_tool_report
 
         _sync_log("🔧 Detecting CLI tools for pipe-optimized data transfer...")
         cli_results = detect_cli_tools(adapter_types)

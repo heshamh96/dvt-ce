@@ -28,7 +28,7 @@ class TestGetDeltaSparkVersion:
     """Tests for _get_delta_spark_version() in sync.py."""
 
     def _get_fn(self):
-        from dvt.task.sync import _get_delta_spark_version
+        from dvt.dvt_tasks.dvt_sync import _get_delta_spark_version
 
         return _get_delta_spark_version
 
@@ -275,9 +275,9 @@ class TestSyncDeltaInstall:
         """sync.py should install delta-spark immediately after pyspark."""
         import inspect
 
-        from dvt.task.sync import SyncTask
+        from dvt.dvt_tasks.dvt_sync import DvtSyncTask
 
-        source = inspect.getsource(SyncTask.run)
+        source = inspect.getsource(DvtSyncTask.run)
         # Find positions of pyspark and delta-spark install in source code
         # Note: f-strings in source have {variable}, not expanded values
         pyspark_pos = source.find("Installing pyspark==")
@@ -293,9 +293,9 @@ class TestSyncDeltaInstall:
         """sync.py should use _get_delta_spark_version for version resolution."""
         import inspect
 
-        from dvt.task.sync import SyncTask
+        from dvt.dvt_tasks.dvt_sync import DvtSyncTask
 
-        source = inspect.getsource(SyncTask.run)
+        source = inspect.getsource(DvtSyncTask.run)
         assert "_get_delta_spark_version" in source, (
             "Should use _get_delta_spark_version() for version mapping"
         )
