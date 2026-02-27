@@ -86,7 +86,7 @@ def create_default_computes_yml(path: Optional[Path] = None) -> bool:
 #     computes:
 #       <compute_name>:
 #         type: spark
-#         version: "4.0.0"    # PySpark version (run 'dvt sync' after changing)
+#         version: "3.5.8"    # PySpark version (default: 3.5.8 if omitted)
 #         # java_home: /path/to/java  # Java installation for this Spark version
 #         master: "local[*]"
 #         config: {...}
@@ -457,7 +457,7 @@ def _compute_profile_template(profile_name: str) -> str:
   computes:
     local_spark:
       type: spark
-      # version: "4.0.0"  # Set PySpark version (3.x or 4.x), then run 'dvt sync'
+      # version: "3.5.8"  # PySpark version (default: 3.5.8 if omitted). Change and run 'dvt sync' to update.
       # java_home: /path/to/java  # Java installation for this Spark version (see compat table above)
       master: "local[*]"
 

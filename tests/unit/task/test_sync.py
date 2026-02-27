@@ -4,9 +4,14 @@ from pathlib import Path
 from unittest import mock
 
 import pytest
+import yaml
 
 from dvt.cli.flags import Flags
-from dvt.dvt_tasks.dvt_sync import DvtSyncTask
+from dvt.dvt_tasks.dvt_sync import (
+    DEFAULT_PYSPARK_VERSION,
+    DvtSyncTask,
+    _get_active_pyspark_version,
+)
 
 
 @pytest.fixture
@@ -190,3 +195,102 @@ class TestDvtSyncTaskJdbcIntegration:
 
         mock_find_env.assert_not_called()
         assert task.env_path == explicit_venv
+
+
+class TestGetActivePysparkVersion:
+    """Tests for _get_active_pyspark_version default behavior."""
+
+    def _write_computes(self, path: Path, data: dict) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(yaml.dump(data))
+
+    def test_returns_none_when_computes_file_missing(self, tmp_path):
+        """No computes.yml at all → None (skip pyspark)."""
+        result = _get_active_pyspark_version(tmp_path / "missing.yml", "my_profile")
+        assert result is None
+
+    def test_returns_none_when_profile_not_in_computes(self, tmp_path):
+        """computes.yml exists but has a different profile → None."""
+        computes_path = tmp_path / "computes.yml"
+        self._write_computes(computes_path, {"other_profile": {"target": "dev"}})
+        result = _get_active_pyspark_version(computes_path, "my_profile")
+        assert result is None
+
+    def test_returns_default_when_version_missing_from_active_compute(self, tmp_path):
+        """Profile and target exist but version key is absent → default."""
+        computes_path = tmp_path / "computes.yml"
+        self._write_computes(
+            computes_path,
+            {
+                "my_profile": {
+                    "target": "dev",
+                    "computes": {"dev": {"type": "spark", "master": "local[*]"}},
+                }
+            },
+        )
+        result = _get_active_pyspark_version(computes_path, "my_profile")
+        assert result == DEFAULT_PYSPARK_VERSION
+
+    def test_returns_default_when_version_is_empty_string(self, tmp_path):
+        """Version key present but empty string → default."""
+        computes_path = tmp_path / "computes.yml"
+        self._write_computes(
+            computes_path,
+            {
+                "my_profile": {
+                    "target": "dev",
+                    "computes": {
+                        "dev": {"type": "spark", "version": "", "master": "local[*]"}
+                    },
+                }
+            },
+        )
+        result = _get_active_pyspark_version(computes_path, "my_profile")
+        assert result == DEFAULT_PYSPARK_VERSION
+
+    def test_returns_default_when_no_computes_section(self, tmp_path):
+        """Profile block exists but has no 'computes' key → default."""
+        computes_path = tmp_path / "computes.yml"
+        self._write_computes(computes_path, {"my_profile": {"target": "dev"}})
+        result = _get_active_pyspark_version(computes_path, "my_profile")
+        assert result == DEFAULT_PYSPARK_VERSION
+
+    def test_returns_default_when_target_not_in_computes(self, tmp_path):
+        """Profile block exists, computes section exists, but active target not found → default."""
+        computes_path = tmp_path / "computes.yml"
+        self._write_computes(
+            computes_path,
+            {
+                "my_profile": {
+                    "target": "prod",
+                    "computes": {"dev": {"type": "spark", "version": "4.0.0"}},
+                }
+            },
+        )
+        result = _get_active_pyspark_version(computes_path, "my_profile")
+        assert result == DEFAULT_PYSPARK_VERSION
+
+    def test_returns_explicit_version_when_set(self, tmp_path):
+        """Version explicitly set → use that version, not the default."""
+        computes_path = tmp_path / "computes.yml"
+        self._write_computes(
+            computes_path,
+            {
+                "my_profile": {
+                    "target": "dev",
+                    "computes": {
+                        "dev": {
+                            "type": "spark",
+                            "version": "4.0.0",
+                            "master": "local[*]",
+                        }
+                    },
+                }
+            },
+        )
+        result = _get_active_pyspark_version(computes_path, "my_profile")
+        assert result == "4.0.0"
+
+    def test_default_pyspark_version_is_3_5_8(self):
+        """Verify the constant itself so a bump is intentional."""
+        assert DEFAULT_PYSPARK_VERSION == "3.5.8"

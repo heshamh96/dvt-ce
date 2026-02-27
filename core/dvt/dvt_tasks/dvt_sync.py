@@ -39,6 +39,10 @@ from dbt_common.exceptions import DbtRuntimeError
 from dvt.events.types import DebugCmdOut
 from dbt_common.ui import yellow, green, red
 
+# Default PySpark version when computes.yml has a profile block but no explicit version.
+# 3.5.x is the most broadly compatible (Java 8, 11, or 17) and widely tested.
+DEFAULT_PYSPARK_VERSION = "3.5.8"
+
 # In-project env dir names (order = preference)
 IN_PROJECT_ENV_NAMES = (".venv", "venv", "env")
 
@@ -294,6 +298,11 @@ def _get_active_pyspark_version(
     """
     Return the pyspark version for the active target of the given profile.
     Active target is profile_block['target']; compute config is profile_block['computes'][target].
+
+    If the profile block exists but 'version' is not set (or commented out),
+    returns DEFAULT_PYSPARK_VERSION so that 'dvt sync' installs PySpark
+    out of the box without requiring the user to edit computes.yml first.
+    Returns None only when computes.yml is missing or has no profile block at all.
     """
     profile_block = _get_computes_for_profile(computes_path, profile_name)
     if not profile_block:
@@ -301,11 +310,13 @@ def _get_active_pyspark_version(
     target_name = profile_block.get("target", "default")
     computes = profile_block.get("computes") or {}
     if not isinstance(computes, dict):
-        return None
+        # Profile block exists but has no computes section — use default
+        return DEFAULT_PYSPARK_VERSION
     active = computes.get(target_name) if isinstance(computes, dict) else None
     if not isinstance(active, dict):
-        return None
-    return active.get("version")
+        # Target not found in computes — use default
+        return DEFAULT_PYSPARK_VERSION
+    return active.get("version") or DEFAULT_PYSPARK_VERSION
 
 
 def _get_delta_spark_version(spark_version: str) -> Optional[str]:
@@ -596,6 +607,10 @@ class DvtSyncTask(BaseTask):
 
         # 3) Install adapters
         pkg_manager = _detect_package_manager(env_python)
+        adapter_results: Dict[str, bool] = {}  # adapter_type -> success
+        if not adapter_types:
+            _sync_log(yellow("⚠️  No adapter types found in profiles.yml for this profile. "
+                             "Check that your profile has 'outputs' with 'type' set."))
         for adapter_type in adapter_types:
             spec = require_adapters.get(adapter_type)
             pkg = f"dbt-{adapter_type}"
@@ -616,8 +631,11 @@ class DvtSyncTask(BaseTask):
                     ok = _run_pip(env_python, ["install", pkg_spec])
             else:
                 ok = _run_pip(env_python, ["install", pkg_spec])
+            adapter_results[pkg_spec] = ok
             if not ok:
-                _sync_log(red(f"❌ Failed to install {pkg_spec}"))
+                _sync_log(red(f"❌ Failed to install {pkg_spec}. "
+                              f"You may need to install system dependencies first "
+                              f"(e.g. FreeTDS for sqlserver, libpq for postgres)."))
 
         # 4) Pyspark: single version from active target; use canonical ~/.dvt/computes.yml
         # so the project's profile block is used (not a local computes.yml from another profile).
@@ -683,7 +701,8 @@ class DvtSyncTask(BaseTask):
                 )
         else:
             _sync_log(
-                "No pyspark version in computes.yml for this profile; skipping pyspark install."
+                "No computes.yml or no profile block found; skipping pyspark install. "
+                "Run 'dvt init' to create computes.yml with your profile."
             )
 
         # 5) JDBC drivers: relate profile adapters to JDBC jars and download for federation.
@@ -801,6 +820,26 @@ class DvtSyncTask(BaseTask):
                 required_versions = _get_required_java_versions(pyspark_version)
             if required_versions:
                 _print_java_installation_instructions(required_versions)
+
+        # Print sync summary
+        _sync_log("")
+        _sync_log("=" * 50)
+        _sync_log("Sync Summary")
+        _sync_log("=" * 50)
+        _sync_log(f"  Profile:     {profile_name}")
+        _sync_log(f"  Environment: {env_path}")
+        if adapter_results:
+            _sync_log(f"  Adapters:")
+            for pkg_name, success in adapter_results.items():
+                status = green("✓ installed") if success else red("✗ FAILED")
+                _sync_log(f"    {pkg_name}: {status}")
+        else:
+            _sync_log(f"  Adapters:    {yellow('none found in profile')}")
+        if pyspark_version:
+            _sync_log(f"  PySpark:     {pyspark_version}")
+        else:
+            _sync_log(f"  PySpark:     {yellow('skipped (no computes.yml profile)')}")
+        _sync_log("=" * 50)
 
         _sync_log(green("✅ Sync complete."))
         return None, True
