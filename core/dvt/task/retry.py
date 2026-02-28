@@ -89,11 +89,16 @@ class RetryTask(ConfiguredTask):
             RETRYABLE_STATUSES.add(NodeStatus.Warn)
 
         cli_command = CMD_DICT.get(self.previous_command_name)  # type: ignore
-        # Remove these args when their default values are present, otherwise they'll raise an exception
+        # Remove these args when their default values are present, otherwise they'll raise an exception.
+        # "static" is a simple is_flag=True (not --static/--no-static), so Click can't
+        # parse --no-static when replaying; always strip it.
         args_to_remove = {
             "show": lambda x: True,
+            "static": lambda x: True,
             "resource_types": lambda x: x == [],
-            "warn_error_options": lambda x: x == {"warn": [], "error": [], "silence": []},
+            "warn_error_options": lambda x: (
+                x == {"warn": [], "error": [], "silence": []}
+            ),
         }
         for k, v in args_to_remove.items():
             if k in self.previous_args and v(self.previous_args[k]):

@@ -577,6 +577,16 @@ sync_python_env = _create_option_and_track_env_var(
     help='Absolute path to the Python environment (venv) to use. Quote the path, e.g. --python-env "$(pwd)/.venv". If not set, sync looks for .venv, venv, or env inside the project directory, or prompts interactively.',
 )
 
+# Sync-only: directory containing computes.yml. Defaults to --profiles-dir (typically ~/.dvt/).
+sync_computes_dir = _create_option_and_track_env_var(
+    "--computes-dir",
+    "computes_dir",
+    envvar="DBT_COMPUTES_DIR",
+    default=None,
+    type=PathWithExpandUser(exists=True),
+    help="Directory containing computes.yml. Defaults to --profiles-dir value (typically ~/.dvt/).",
+)
+
 quiet = _create_option_and_track_env_var(
     "--quiet/--no-quiet",
     "-q",

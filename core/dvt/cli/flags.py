@@ -367,10 +367,13 @@ class Flags:
         if info_name == "sync":
             project_dir = ctx.params.get("project_dir")
             python_env = ctx.params.get("python_env")
+            computes_dir = ctx.params.get("computes_dir")
             if project_dir is not None:
                 object.__setattr__(self, "PROJECT_DIR", project_dir)
             if python_env is not None:
                 object.__setattr__(self, "PYTHON_ENV", python_env)
+            if computes_dir is not None:
+                object.__setattr__(self, "COMPUTES_DIR", computes_dir)
             # Defaults for flags that setup_event_logger and preflight read but sync does not have as options.
             # Set these BEFORE any code that might access them via __getattr__
             _sync_flag_defaults = (
@@ -609,6 +612,24 @@ def command_params(command: CliCommand, args_dict: Dict[str, Any]) -> CommandPar
 
         if k == "macro" and command == CliCommand.RUN_OPERATION:
             add_fn(v)
+        # Simple is_flag=True flags (no --flag/--no-flag pair): Click doesn't
+        # recognize --no-{flag} for these.  When False, just omit them entirely
+        # (False is their default anyway).
+        elif v is False and k in (
+            "config_dir",
+            "config",
+            "manifest",
+            "empty_catalog",
+            "full_refresh",
+            "lock",
+            "show",
+            "skip_profile_setup",
+            "static",
+            "store_failures",
+            "upgrade",
+            "warn_error",
+        ):
+            continue
         # None is a Singleton, False is a Flyweight, only one instance of each.
         elif (v is None or v is False) and k not in (
             # These are None by default but they do not support --no-{flag}
@@ -663,6 +684,7 @@ def command_args(command: CliCommand) -> ArgsList:
         CliCommand.SOURCE_FRESHNESS: cli.freshness,
         CliCommand.TEST: cli.test,
         CliCommand.RETRY: cli.retry,
+        CliCommand.SYNC: cli.sync,
     }
     click_cmd: Optional[ClickCommand] = CMD_DICT.get(command, None)
     if click_cmd is None:

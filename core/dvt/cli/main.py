@@ -522,6 +522,7 @@ def init(ctx, **kwargs):
 @requires.preflight
 @p.project_dir
 @p.profiles_dir
+@p.sync_computes_dir
 @p.sync_python_env
 def sync(ctx, **kwargs):
     """Sync project env: install adapters and pyspark from dbt_project.yml, profiles, and computes.yml."""

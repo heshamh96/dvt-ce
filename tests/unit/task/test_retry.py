@@ -12,6 +12,7 @@ EXCLUDED_COMMANDS = {
     "retry",
     "show",
     "serve",
+    "sync",
 }
 
 
@@ -20,4 +21,6 @@ def test_task_cmd_dicts():
 
 
 def test_exhaustive_commands():
-    assert set(TASK_DICT.keys()).union(EXCLUDED_COMMANDS) == set(i.value.lower() for i in Command)
+    assert set(TASK_DICT.keys()).union(EXCLUDED_COMMANDS) == set(
+        i.value.lower() for i in Command
+    )

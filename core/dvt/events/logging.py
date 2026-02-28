@@ -1,4 +1,5 @@
 import os
+import sys
 from functools import partial
 from typing import Callable, List
 
@@ -59,7 +60,9 @@ def _get_logfile_config(
     )
 
 
-def _logfile_filter(log_cache_events: bool, line_format: LineFormat, msg: EventMsg) -> bool:
+def _logfile_filter(
+    log_cache_events: bool, line_format: LineFormat, msg: EventMsg
+) -> bool:
     return msg.info.code not in _NOFILE_CODES and not (
         msg.info.name in ["CacheAction", "CacheDumpGraph"] and not log_cache_events
     )
@@ -77,26 +80,55 @@ def setup_event_logger(flags, callbacks: List[Callable[[EventMsg], None]] = []) 
         log_level = (
             EventLevel.ERROR
             if flags.QUIET
-            else EventLevel.DEBUG if flags.DEBUG else EventLevel(flags.LOG_LEVEL)
+            else EventLevel.DEBUG
+            if flags.DEBUG
+            else EventLevel(flags.LOG_LEVEL)
         )
-        console_config = get_stdout_config(
+
+        capture_stream = get_capture_stream()
+
+        # DVT: Split console output into two loggers:
+        #   1. stderr_log: all log messages EXCEPT PrintEvent → stderr
+        #   2. stdout_log: ONLY PrintEvent (command output) → stdout
+        # This ensures commands like `dvt list --output json` produce clean
+        # stdout that can be piped/parsed without log noise.
+        stderr_config = get_stdout_config(
             line_format,
             flags.USE_COLORS,
             log_level,
             flags.LOG_CACHE_EVENTS,
         )
+        stderr_config.name = "stderr_log"
+        stderr_config.output_stream = capture_stream or sys.stderr
+        # Filter OUT PrintEvent from the stderr logger
+        _original_stderr_filter = stderr_config.filter
+        stderr_config.filter = lambda msg: (
+            _original_stderr_filter(msg) and msg.info.name != "PrintEvent"
+        )
+        add_logger_to_manager(stderr_config)
 
-        if get_capture_stream():
-            # Create second stdout logger to support test which want to know what's
-            # being sent to stdout.
-            console_config.output_stream = get_capture_stream()
-        add_logger_to_manager(console_config)
+        # stdout logger: ONLY PrintEvent (list/show results, print() macro output)
+        stdout_config = LoggerConfig(
+            name="stdout_log",
+            level=log_level,
+            use_colors=flags.USE_COLORS,
+            line_format=line_format,
+            scrubber=env_scrubber,
+            invocation_id=get_invocation_id(),
+            output_stream=capture_stream or sys.stdout,
+            filter=lambda msg: msg.info.name == "PrintEvent",
+        )
+        add_logger_to_manager(stdout_config)
 
     if flags.LOG_LEVEL_FILE != "none":
         # create and add the file logger to the event manager
         log_file = os.path.join(flags.LOG_PATH, "dvt.log")
-        log_file_format = _line_format_from_str(flags.LOG_FORMAT_FILE, LineFormat.DebugText)
-        log_level_file = EventLevel.DEBUG if flags.DEBUG else EventLevel(flags.LOG_LEVEL_FILE)
+        log_file_format = _line_format_from_str(
+            flags.LOG_FORMAT_FILE, LineFormat.DebugText
+        )
+        log_level_file = (
+            EventLevel.DEBUG if flags.DEBUG else EventLevel(flags.LOG_LEVEL_FILE)
+        )
         add_logger_to_manager(
             _get_logfile_config(
                 log_file,

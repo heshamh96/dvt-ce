@@ -8,8 +8,9 @@ RUNNER_MAP is used, with SparkSeedRunner replacing the dbt SeedRunner.
 
 from __future__ import annotations
 
-from typing import Optional, Type
+from typing import AbstractSet, Optional, Type
 
+from dvt.adapters.base import BaseAdapter
 from dvt.dvt_compilation.dvt_compiler import DvtCompiler
 from dvt.dvt_tasks.dvt_run import DvtRunTask
 from dvt.node_types import NodeType
@@ -40,6 +41,31 @@ class DvtBuildTask(DvtRunTask, BuildTask):
         # Override seed runner to use Spark-based seeding
         self.RUNNER_MAP = dict(self.RUNNER_MAP)
         self.RUNNER_MAP[NodeType.Seed] = SparkSeedRunner
+
+    def before_run(
+        self, adapter: BaseAdapter, selected_uids: AbstractSet[str]
+    ) -> "RunStatus":
+        """Extend DvtRunTask.before_run to also init Spark for seeds.
+
+        DvtRunTask.before_run only initializes Spark when federation models
+        are present.  But dvt build also runs seeds via SparkSeedRunner,
+        which requires SparkManager to be initialized.  When the selection
+        includes seed nodes, ensure Spark is ready before execution starts.
+        """
+        # Let DvtRunTask resolve federation paths and conditionally init Spark
+        result = DvtRunTask.before_run(self, adapter, selected_uids)
+
+        # If Spark wasn't initialized for federation, check if we have seeds
+        if not self._spark_initialized and self.manifest:
+            has_seeds = any(
+                self.manifest.nodes[uid].resource_type == NodeType.Seed
+                for uid in selected_uids
+                if uid in self.manifest.nodes
+            )
+            if has_seeds:
+                self._initialize_spark_for_federation()
+
+        return result
 
     def get_runner_type(self, node) -> Optional[Type[BaseRunner]]:
         # For Model nodes, use DvtRunTask routing (federation/pushdown/microbatch)

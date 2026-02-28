@@ -553,6 +553,52 @@ sample_values = [
     core_types.ArtifactUploadSuccess(),
     core_types.ArtifactUploadError(),
     core_types.ArtifactUploadSkipped(),
+    # F - Federation (DVT-specific)
+    core_types.FederationPathResolved(
+        model_name="m", execution_path="spark_federation", target="pg_dev"
+    ),
+    core_types.FederationSparkInitialized(num_models=2),
+    core_types.FederationSparkShutdown(),
+    core_types.FederationSourceExtractStart(
+        source_name="src", table_name="tbl", target="pg_dev"
+    ),
+    core_types.FederationSourceExtractComplete(
+        source_name="src", table_name="tbl", row_count=100, elapsed=1.5
+    ),
+    core_types.FederationSourceExtractSkipped(
+        source_name="src", table_name="tbl", reason="cached"
+    ),
+    core_types.FederationSourceExtractError(
+        source_name="src", table_name="tbl", error="timeout"
+    ),
+    core_types.FederationPredicatePushdown(
+        source_name="src", predicates=["id > 0"], limit=1000
+    ),
+    core_types.FederationTempViewRegistered(view_name="src__tbl"),
+    core_types.FederationTempViewCleanup(view_count=3, model_name="m"),
+    core_types.FederationSQLTranslation(source_dialect="postgres", model_name="m"),
+    core_types.FederationSQLTranslationError(model_name="m", error="unsupported"),
+    core_types.FederationExecutionStart(model_name="m", num_sources=2),
+    core_types.FederationExecutionComplete(model_name="m", elapsed=4.2),
+    core_types.FederationExecutionError(model_name="m", error="spark crash"),
+    core_types.FederationWriteStart(target="pg_dev", schema="public", relation="tbl"),
+    core_types.FederationWriteComplete(
+        target="pg_dev", schema="public", relation="tbl", row_count=50, elapsed=2.1
+    ),
+    core_types.FederationWriteError(target="pg_dev", error="connection lost"),
+    core_types.FederationMaterializationCoercion(
+        model_name="m", original="view", coerced="table"
+    ),
+    core_types.FederationIncrementalExtract(
+        source_name="src", new_rows=10, changed_rows=5, deleted_rows=0
+    ),
+    core_types.FederationSchemaChange(source_name="src", table_name="tbl"),
+    core_types.FederationBucketOperation(
+        operation="upload", bucket_name="staging", path="data/out.parquet"
+    ),
+    core_types.FederationSummary(
+        federation_models=3, pushdown_models=5, sources_extracted=8
+    ),
 ]
 
 

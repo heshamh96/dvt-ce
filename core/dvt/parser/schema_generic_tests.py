@@ -54,7 +54,11 @@ class SchemaGenericTestParser(SimpleParser):
         self.render_ctx = generate_schema_yml_context(
             self.root_project, self.project.project_name, self.schema_yaml_vars
         )
-        internal_package_names = get_adapter_package_names(self.root_project.credentials.type)
+        internal_package_names = get_adapter_package_names(
+            self.root_project.credentials.type
+        )
+        if "dvt" not in internal_package_names:
+            internal_package_names.append("dvt")
         self.macro_resolver = MacroResolver(
             self.manifest.macros, self.root_project.project_name, internal_package_names
         )
@@ -104,7 +108,9 @@ class SchemaGenericTestParser(SimpleParser):
         # N.B: This function builds a hashable string from any given test_metadata dict.
         #   it's a bit fragile for general use (only supports str, int, float, List, Dict)
         #   but it gets the job done here without the overhead of complete ser(de).
-        def get_hashable_md(data: Union[str, int, float, List, Dict]) -> Union[str, List, Dict]:
+        def get_hashable_md(
+            data: Union[str, int, float, List, Dict],
+        ) -> Union[str, List, Dict]:
             if type(data) == dict:
                 return {k: get_hashable_md(data[k]) for k in sorted(data.keys())}  # type: ignore
             elif type(data) == list:
@@ -172,7 +178,9 @@ class SchemaGenericTestParser(SimpleParser):
                 render_ctx=self.render_ctx,
             )
             if self.schema_yaml_vars.env_vars:
-                self.store_env_vars(target, schema_file_id, self.schema_yaml_vars.env_vars)
+                self.store_env_vars(
+                    target, schema_file_id, self.schema_yaml_vars.env_vars
+                )
                 self.schema_yaml_vars.env_vars = {}
 
         except ParsingError as exc:
@@ -253,7 +261,9 @@ class SchemaGenericTestParser(SimpleParser):
                     target.name, None
                 ) or self.manifest.disabled_lookup.find(target.name.upper(), None)
                 if disabled_node:
-                    attached_node = self.manifest.disabled[disabled_node[0].unique_id][0]
+                    attached_node = self.manifest.disabled[disabled_node[0].unique_id][
+                        0
+                    ]
         return attached_node
 
     def store_env_vars(self, target, schema_file_id, env_vars):
@@ -295,7 +305,9 @@ class SchemaGenericTestParser(SimpleParser):
                 sources = [builder.target.fqn[-2], builder.target.fqn[-1]]
                 node.sources.append(sources)
             else:  # all other nodes
-                node.refs.append(RefArgs(name=builder.target.name, version=builder.version))
+                node.refs.append(
+                    RefArgs(name=builder.target.name, version=builder.version)
+                )
         else:
             try:
                 # make a base context that doesn't have the magic kwargs field
@@ -380,7 +392,9 @@ class SchemaGenericTestParser(SimpleParser):
             column_tags: List[str] = []
         else:
             column_name = column.name
-            should_quote = column.quote or (column.quote is None and target_block.quote_columns)
+            should_quote = column.quote or (
+                column.quote is None and target_block.quote_columns
+            )
             if should_quote:
                 column_name = get_adapter(self.root_project).quote(column_name)
 
@@ -418,5 +432,8 @@ class SchemaGenericTestParser(SimpleParser):
 
     def generate_unique_id(self, resource_name: str, hash: Optional[str] = None) -> str:
         return ".".join(
-            filter(None, [self.resource_type, self.project.project_name, resource_name, hash])
+            filter(
+                None,
+                [self.resource_type, self.project.project_name, resource_name, hash],
+            )
         )

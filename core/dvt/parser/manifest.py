@@ -822,6 +822,8 @@ class ManifestLoader:
         internal_package_names = get_adapter_package_names(
             self.root_project.credentials.type
         )
+        if "dvt" not in internal_package_names:
+            internal_package_names.append("dvt")
         self.macro_resolver = MacroResolver(
             self.manifest.macros, self.root_project.project_name, internal_package_names
         )

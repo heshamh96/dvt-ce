@@ -27,7 +27,8 @@ def test_validate_engine_env_vars():
     # If it's more than one, then we're getting too many deprecation instances (and we should check what the other env vars identified were)
     assert active_deprecations[EVND().name] == 1
     assert (
-        "DBT_ENGINE_MY_CUSTOM_ENV_VAR_FOR_TESTING" == event_catcher.caught_events[0].data.env_var
+        "DBT_ENGINE_MY_CUSTOM_ENV_VAR_FOR_TESTING"
+        == event_catcher.caught_events[0].data.env_var
     )
 
 
@@ -44,6 +45,6 @@ def test_engine_env_vars_with_old_names_has_not_increased():
     # In the case of (1), we should correct the new engine environent variable name
     # In the case of (2), we should increase the number here.
     # In the case of (3), we should decrease the number here.
-    assert (
-        engine_env_vars_with_old_names == 65
-    ), "We've added a new engine env var _without_ using the new naming scheme"
+    assert engine_env_vars_with_old_names == 66, (
+        "We've added a new engine env var _without_ using the new naming scheme"
+    )

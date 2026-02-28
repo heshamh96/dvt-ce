@@ -1164,6 +1164,8 @@ class ProviderContext(ManifestContext):
     # a model, which the ManifestContext builder does not
     def _get_namespace_builder(self):
         internal_packages = get_adapter_package_names(self.config.credentials.type)
+        if "dvt" not in internal_packages:
+            internal_packages.append("dvt")
         return MacroNamespaceBuilder(
             self.config.project_name,
             self.search_package,
@@ -2103,7 +2105,7 @@ def generate_runtime_unit_test_context(
             ctx_dict[macro_package][macro_name] = macro_override_value
             # propgate override of namespaced dbt macro to global namespace
             if macro_package == "dvt":
-                ctx_dict[macro_name] = macro_value
+                ctx_dict[macro_name] = macro_override_value
 
         # macro overrides of global macros, which should take precedence over equivalent package-namespaced overrides
         for macro_name, macro_override_value in global_macro_overrides.items():

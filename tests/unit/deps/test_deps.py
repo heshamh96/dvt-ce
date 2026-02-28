@@ -1138,7 +1138,7 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         """Test that underscore and hyphen variants match (dbt_utils matches dvt-utils)"""
         # Adding hub package with underscore should match git package with hyphen
         mock_args = Namespace(
-            add_package={"name": "dvt-labs/dbt_utils", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dvt_utils", "version": "1.0.0"}, source="hub"
         )
 
         with mock.patch("dvt.task.deps.BaseTask.__init__"):
@@ -1213,7 +1213,7 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
                     "revision": "2.0.0",
                 },
                 {
-                    "package": "dvt-labs/dbt_utils",  # Should match (underscore variant)
+                    "package": "dvt-labs/dvt_utils",  # Should match (underscore variant)
                     "version": "0.9.0",
                 },
             ]

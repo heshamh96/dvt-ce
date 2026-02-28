@@ -249,6 +249,7 @@ def assertEqualNodes(node_one, node_two):
 SINGLE_TABLE_SOURCE = """
 sources:
     - name: my_source
+      connection: test
       tables:
         - name: my_table
 """
@@ -257,6 +258,7 @@ sources:
 MULTIPLE_TABLE_SOURCE_META = """
 sources:
     - name: my_source
+      connection: test
       meta:
         source_field: source_value
         shared_field: shared_field_default
@@ -273,6 +275,7 @@ sources:
 SINGLE_TABLE_SOURCE_TESTS = """
 sources:
     - name: my_source
+      connection: test
       tables:
         - name: my_table
           description: A description of my table
@@ -453,6 +456,7 @@ sources:
 SOURCE_CUSTOM_FRESHNESS_AT_SOURCE = """
 sources:
   - name: my_source
+    connection: test
     loaded_at_query: "select 1 as id"
     tables:
       - name: my_table
@@ -460,6 +464,7 @@ sources:
 SOURCE_CUSTOM_FRESHNESS_AT_SOURCE_FIELD_AT_TABLE = """
 sources:
   - name: my_source
+    connection: test
     loaded_at_query: "select 1 as id"
     tables:
       - name: my_table
@@ -468,6 +473,7 @@ sources:
 SOURCE_FIELD_AT_SOURCE_CUSTOM_FRESHNESS_AT_TABLE = """
 sources:
   - name: my_source
+    connection: test
     loaded_at_field: test
     tables:
       - name: my_table
@@ -477,6 +483,7 @@ sources:
 SOURCE_FRESHNESS_AT_TABLE_AND_CONFIG = """
 sources:
   - name: my_source
+    connection: test
     loaded_at_field: test
     tables:
       - name: my_table
@@ -492,6 +499,7 @@ sources:
 SOURCE_FIELD_AT_CUSTOM_FRESHNESS_BOTH_AT_TABLE = """
 sources:
   - name: my_source
+    connection: test
     loaded_at_field: test
     tables:
       - name: my_table
@@ -501,6 +509,7 @@ sources:
 SOURCE_FIELD_AT_CUSTOM_FRESHNESS_BOTH_AT_SOURCE = """
 sources:
   - name: my_source
+    connection: test
     loaded_at_field: test
     loaded_at_query: "select 1 as id"
     tables:

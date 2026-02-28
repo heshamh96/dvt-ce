@@ -526,6 +526,11 @@ class DvtSyncTask(BaseTask):
         self.profiles_dir = (
             Path(args.PROFILES_DIR) if args.PROFILES_DIR else get_dvt_home()
         )
+        # --computes-dir defaults to --profiles-dir (which itself defaults to ~/.dvt/)
+        computes_dir_arg = getattr(args, "COMPUTES_DIR", None)
+        self.computes_dir = (
+            Path(computes_dir_arg) if computes_dir_arg else self.profiles_dir
+        )
 
     def run(self):
         _sync_log("dvt sync: starting...")
@@ -609,8 +614,12 @@ class DvtSyncTask(BaseTask):
         pkg_manager = _detect_package_manager(env_python)
         adapter_results: Dict[str, bool] = {}  # adapter_type -> success
         if not adapter_types:
-            _sync_log(yellow("⚠️  No adapter types found in profiles.yml for this profile. "
-                             "Check that your profile has 'outputs' with 'type' set."))
+            _sync_log(
+                yellow(
+                    "⚠️  No adapter types found in profiles.yml for this profile. "
+                    "Check that your profile has 'outputs' with 'type' set."
+                )
+            )
         for adapter_type in adapter_types:
             spec = require_adapters.get(adapter_type)
             pkg = f"dbt-{adapter_type}"
@@ -633,13 +642,17 @@ class DvtSyncTask(BaseTask):
                 ok = _run_pip(env_python, ["install", pkg_spec])
             adapter_results[pkg_spec] = ok
             if not ok:
-                _sync_log(red(f"❌ Failed to install {pkg_spec}. "
-                              f"You may need to install system dependencies first "
-                              f"(e.g. FreeTDS for sqlserver, libpq for postgres)."))
+                _sync_log(
+                    red(
+                        f"❌ Failed to install {pkg_spec}. "
+                        f"You may need to install system dependencies first "
+                        f"(e.g. FreeTDS for sqlserver, libpq for postgres)."
+                    )
+                )
 
-        # 4) Pyspark: single version from active target; use canonical ~/.dvt/computes.yml
-        # so the project's profile block is used (not a local computes.yml from another profile).
-        computes_path = get_dvt_home(None) / "computes.yml"
+        # 4) Pyspark: single version from active target.
+        # Uses --computes-dir if provided, otherwise falls back to --profiles-dir / ~/.dvt/.
+        computes_path = self.computes_dir / "computes.yml"
         pyspark_version = (
             _get_active_pyspark_version(computes_path, profile_name)
             if computes_path.exists()
@@ -826,6 +839,9 @@ class DvtSyncTask(BaseTask):
         _sync_log("=" * 50)
         _sync_log("Sync Summary")
         _sync_log("=" * 50)
+        _sync_log(f"  Project:     {project_root}")
+        _sync_log(f"  Profiles:    {self.profiles_dir}")
+        _sync_log(f"  Computes:    {self.computes_dir}")
         _sync_log(f"  Profile:     {profile_name}")
         _sync_log(f"  Environment: {env_path}")
         if adapter_results:

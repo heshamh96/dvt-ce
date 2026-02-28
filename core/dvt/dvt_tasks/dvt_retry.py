@@ -93,8 +93,12 @@ class DvtRetryTask(RetryTask):
             RETRYABLE_STATUSES.add(NodeStatus.Warn)
 
         cli_command = CMD_DICT.get(self.previous_command_name)
+        # Remove args whose default values can't be replayed through Click.
+        # "static" is a simple is_flag=True (not --static/--no-static), so Click
+        # can't parse --no-static when replaying; always strip it.
         args_to_remove = {
             "show": lambda x: True,
+            "static": lambda x: True,
             "resource_types": lambda x: x == [],
             "warn_error_options": lambda x: (
                 x == {"warn": [], "error": [], "silence": []}

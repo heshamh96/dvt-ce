@@ -45,7 +45,11 @@ class ManifestContext(ConfiguredContext):
         # avoid an import loop
         from dvt.adapters.factory import get_adapter_package_names
 
-        internal_packages: List[str] = get_adapter_package_names(self.config.credentials.type)
+        internal_packages: List[str] = get_adapter_package_names(
+            self.config.credentials.type
+        )
+        if "dvt" not in internal_packages:
+            internal_packages.append("dvt")
         return MacroNamespaceBuilder(
             self.config.project_name,
             self.search_package,
