@@ -169,6 +169,10 @@ def spark_type_to_sql_type(spark_type: Any, adapter_type: str) -> str:
     elif at in ("mysql", "mariadb"):
         varchar_len = "4000"
         varbinary_len = "4000"
+    elif at in ("sqlserver", "synapse", "fabric"):
+        # MSSQL VARCHAR max is 8000 bytes; use 4000 for safe unicode compat
+        varchar_len = "4000"
+        varbinary_len = "4000"
     else:
         varchar_len = "65535"
         varbinary_len = "65535"
@@ -194,7 +198,7 @@ def spark_type_to_sql_type(spark_type: Any, adapter_type: str) -> str:
         scale = getattr(spark_type, "scale", 0)
         sql_type = f"DECIMAL({precision},{scale})"
     else:
-        sql_type = sql_type_map.get(type_name, "VARCHAR(65535)")
+        sql_type = sql_type_map.get(type_name, f"VARCHAR({varchar_len})")
 
     # Use SQLGlot to get dialect-specific type representation
     sqlglot_dialect = get_sqlglot_dialect(adapter_type)

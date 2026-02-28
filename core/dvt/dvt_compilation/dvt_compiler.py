@@ -67,6 +67,7 @@ class DvtCompiler(Compiler):
         write: bool = True,
         split_suffix: Optional[str] = None,
         adapter: Optional[Any] = None,
+        skip_source_adapter: bool = False,
     ) -> ManifestSQLNode:
         """Compile a single node with cross-dialect support.
 
@@ -81,6 +82,12 @@ class DvtCompiler(Compiler):
             Explicit target adapter (e.g., from NonDefaultPushdownRunner).
             Used for transpile target resolution.  When None, the global
             default adapter is used as the target.
+        skip_source_adapter : bool
+            When True, skip resolving a source adapter override.  Used by
+            FederationModelRunner where the default adapter should handle
+            all Jinja rendering ({{ source() }}, {{ ref() }}) to avoid
+            cross-adapter relation validation errors.  The federation
+            engine handles SQL transpilation separately.
         """
         from dvt.contracts.graph.nodes import UnitTestDefinition
 
@@ -95,7 +102,11 @@ class DvtCompiler(Compiler):
 
         # DVT: Resolve source adapter for Jinja rendering.
         # When source == target dialect, source_adapter is None (no override).
-        source_adapter = self._resolve_source_adapter(node)
+        # skip_source_adapter=True: federation models use default adapter.
+        if skip_source_adapter:
+            source_adapter = None
+        else:
+            source_adapter = self._resolve_source_adapter(node)
         jinja_adapter = source_adapter if source_adapter is not None else adapter
 
         node = self._compile_code(node, manifest, extra_context, adapter=jinja_adapter)

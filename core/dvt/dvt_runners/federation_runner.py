@@ -53,15 +53,27 @@ class FederationModelRunner(DvtRunnerMixin, CompileRunner):
         )
 
     def compile(self, manifest: Manifest):
-        """Compile with target-aware adapter.
+        """Compile with default adapter — no source adapter override.
 
-        For federation models targeting a non-default adapter, compile using
-        the target adapter so Jinja resolves refs/sources with the correct
-        dialect.  If same as default, fall back to standard compilation.
+        Federation models always compile with the DEFAULT adapter (the
+        profile's primary target). This is correct because:
+        1. {{ source() }} and {{ ref() }} create relations using the default
+           adapter's Relation class, avoiding cross-adapter validation errors
+           (e.g., MySQL rejects database != schema for PG source relations).
+        2. The federation engine handles SQL translation/transpilation in
+           _translate_to_spark() — it rewrites table refs to Spark temp views,
+           making the compiled SQL dialect irrelevant.
+        3. The compiled SQL just needs valid table references that the
+           federation engine can find and replace.
+
+        We call compiler.compile_node() with adapter=None and skip_source_adapter=True
+        to prevent the DvtCompiler from resolving a non-default source adapter
+        based on model.config.target.
         """
-        if self.resolution.target == self.config.target_name:
-            return super().compile(manifest)
-        return self._compile_with_target_adapter(manifest)
+        extra_context = self._resolve_is_incremental_for_federation(manifest)
+        return self.compiler.compile_node(
+            self.node, manifest, extra_context, skip_source_adapter=True
+        )
 
     def execute(self, model: ModelNode, manifest: Manifest) -> RunResult:
         """Execute model via federation engine."""

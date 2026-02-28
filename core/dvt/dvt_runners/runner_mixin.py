@@ -116,6 +116,15 @@ class DvtRunnerMixin:
         Used by both federation and pushdown runners when the model
         targets a non-default adapter.
 
+        IMPORTANT: For federation models, Jinja rendering ({{ source() }},
+        {{ ref() }}, {{ this }}) uses the DEFAULT adapter, not the target
+        adapter. This avoids adapter-specific relation validation issues
+        (e.g., MySQL rejects database != schema, Oracle rejects 'public'
+        schema). The federation engine handles SQL transpilation later.
+
+        The target adapter is only passed for SQL transpilation
+        (_transpile_if_needed) within compile_node.
+
         For incremental models on the federation path, is_incremental()
         normally calls adapter.get_relation() which requires adapter-specific
         macros (e.g., Databricks's 'get_uc_tables'). These macros aren't in
@@ -140,6 +149,32 @@ class DvtRunnerMixin:
         return self.compiler.compile_node(
             self.node, manifest, extra_context, adapter=target_adapter
         )
+
+    def _fix_node_schema_for_target(self, target_adapter) -> None:
+        """Override node schema/database to match the target adapter credentials.
+
+        When a federation model's config.target differs from the profile default,
+        the node's schema and database are set from the default target (wrong).
+        This method corrects them to the target adapter's values.
+
+        For MySQL/MariaDB: database must equal schema (or be unset).
+        For MSSQL: schema is typically 'dbo', not 'public'.
+        For Oracle: schema is typically the user (e.g., 'SYSTEM').
+        """
+        creds = target_adapter.config.credentials
+        target_schema = getattr(creds, "schema", None)
+        target_database = getattr(creds, "database", None)
+
+        # Only override if the model doesn't have an explicit custom schema
+        model_has_custom_schema = getattr(
+            getattr(self.node, "config", None), "schema", None
+        )
+
+        if not model_has_custom_schema and target_schema:
+            self.node.schema = target_schema
+
+        if target_database is not None:
+            self.node.database = target_database
 
     def _resolve_is_incremental_for_federation(self, manifest) -> dict:
         """Determine is_incremental() for federation models using local Delta staging.

@@ -133,14 +133,16 @@ class OracleExtractor(BaseExtractor):
     def get_columns(
         self, schema: str, table: str, config: ExtractionConfig = None
     ) -> List[Dict[str, str]]:
+        # Note: :schema and :table are reserved words in Oracle and cannot be
+        # used as bind variable names (ORA-01745). Use :owner_name/:tbl_name.
         query = """
             SELECT COLUMN_NAME, DATA_TYPE
             FROM ALL_TAB_COLUMNS
-            WHERE OWNER = :schema AND TABLE_NAME = :table
+            WHERE OWNER = :owner_name AND TABLE_NAME = :tbl_name
             ORDER BY COLUMN_ID
         """
         cursor = self._get_connection(config).cursor()
-        cursor.execute(query, {"schema": schema.upper(), "table": table.upper()})
+        cursor.execute(query, {"owner_name": schema.upper(), "tbl_name": table.upper()})
         columns = [{"name": row[0], "type": row[1]} for row in cursor.fetchall()]
         cursor.close()
         return columns
@@ -148,6 +150,7 @@ class OracleExtractor(BaseExtractor):
     def detect_primary_key(
         self, schema: str, table: str, config: ExtractionConfig = None
     ) -> List[str]:
+        # Note: :schema and :table are reserved words in Oracle (ORA-01745).
         query = """
             SELECT cols.COLUMN_NAME
             FROM ALL_CONSTRAINTS cons
@@ -155,13 +158,15 @@ class OracleExtractor(BaseExtractor):
                 ON cons.CONSTRAINT_NAME = cols.CONSTRAINT_NAME
                 AND cons.OWNER = cols.OWNER
             WHERE cons.CONSTRAINT_TYPE = 'P'
-            AND cons.OWNER = :schema
-            AND cons.TABLE_NAME = :table
+            AND cons.OWNER = :owner_name
+            AND cons.TABLE_NAME = :tbl_name
             ORDER BY cols.POSITION
         """
         cursor = self._get_connection(config).cursor()
         try:
-            cursor.execute(query, {"schema": schema.upper(), "table": table.upper()})
+            cursor.execute(
+                query, {"owner_name": schema.upper(), "tbl_name": table.upper()}
+            )
             pk_cols = [row[0] for row in cursor.fetchall()]
         except Exception:
             pk_cols = []

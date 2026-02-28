@@ -527,7 +527,11 @@ class BaseExtractor(ABC):
 
             # Build query
             query = self.build_export_query(config)
-            dbtable = f"({query}) AS dvt_extract"
+            # Oracle doesn't support AS for subquery aliases; omit AS for Oracle
+            if adapter_type == "oracle":
+                dbtable = f"({query}) dvt_extract"
+            else:
+                dbtable = f"({query}) AS dvt_extract"
 
             # Get JDBC extraction settings from config
             jdbc_settings = config.jdbc_config or {}

@@ -1069,7 +1069,24 @@ class FederationEngine:
                 or ""
             )
         else:
-            effective_schema = model.schema
+            # model.schema is set at parse time from the DEFAULT target, NOT
+            # from the model's config.target. When a model specifies
+            # config(target='mssql_docker') but the profile default is
+            # pg_docker, model.schema will be 'public' (Postgres) instead of
+            # 'dbo' (MSSQL). Check if the model has an explicit custom schema;
+            # if not, use the actual target config's schema.
+            model_has_custom_schema = getattr(
+                getattr(model, "config", None), "schema", None
+            )
+            if model_has_custom_schema:
+                effective_schema = model.schema
+            elif model_config_target and model_config_target != default_target:
+                # Model targets a different engine than the default —
+                # model.schema was parsed from the wrong target
+                effective_schema = target_config.get("schema") or model.schema
+            else:
+                effective_schema = model.schema
+
             # model.database is set at parse time from the default target,
             # NOT from the model's config.target. For Databricks models that
             # specify config(target='dbx_dev'), model.database will still be

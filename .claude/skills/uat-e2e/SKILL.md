@@ -13,7 +13,7 @@ This UAT validates every DVT CLI command against real databases (PostgreSQL, Dat
 
 ## Prerequisites
 
-- Trial project exists in `~/Documents/My_Projects/DVT/Testing_Playground/trial_<N>_full_cli_e2e/Coke_DB/`
+- Trial project exists in `~/Documents/My_Projects/DVT/Testing_Factory/Testing_Playground/trial_<N>_full_cli_e2e/Coke_DB/`
 - PostgreSQL running locally (port 5433)
 - Databricks workspace accessible (demo catalog, dvt_test schema)
 - Snowflake EXIM accessible (EXIM_EDWH_DEV, read-only via `sf_dev`)

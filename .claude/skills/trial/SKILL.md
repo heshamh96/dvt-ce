@@ -11,7 +11,7 @@ Create a new trial environment for testing DVT features.
 
 ## Steps
 
-1. Create trial directory at `/Users/hex/Documents/My_Projects/DVT/Testing_Playground/trial_$ARGUMENTS`
+1. Create trial directory at `/Users/hex/Documents/My_Projects/DVT/Testing_Factory/Testing_Playground/trial_$ARGUMENTS`
 2. Initialize with `uv init`
 3. Add dvt-core as path dependency: `uv add dvt-core --path /Users/hex/Documents/My_Projects/DVT/dvt-core/core`
 4. Add dbt-postgres adapter: `uv add dbt-postgres`
@@ -22,13 +22,13 @@ Create a new trial environment for testing DVT features.
 
 The trial is ready for:
 ```bash
-cd /Users/hex/Documents/My_Projects/DVT/Testing_Playground/trial_$ARGUMENTS
+cd /Users/hex/Documents/My_Projects/DVT/Testing_Factory/Testing_Playground/trial_$ARGUMENTS
 uv run dvt init <project_name>
 ```
 
 ## Example
 
 `/trial spark_jdbc` creates:
-- `/Users/hex/Documents/My_Projects/DVT/Testing_Playground/trial_spark_jdbc/`
+- `/Users/hex/Documents/My_Projects/DVT/Testing_Factory/Testing_Playground/trial_spark_jdbc/`
 - With dvt-core and dbt-postgres installed
 - Ready for DVT project initialization
