@@ -463,7 +463,8 @@ class TestDatabricksSpecialColumnsPath:
         insert_sql = insert_calls[0][0][0]
         assert "INSERT INTO `dvt_test`.`test_table`" in insert_sql
         assert "`Customer Code`" in insert_sql
-        assert "`quantity`" in insert_sql
+        # Simple name is unquoted
+        assert "quantity" in insert_sql
         assert "CUST001" in insert_sql
         assert "CUST002" in insert_sql
 

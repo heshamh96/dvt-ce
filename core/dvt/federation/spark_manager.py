@@ -423,7 +423,10 @@ class SparkManager:
             host = connection.get("host") or "localhost"
             port = connection.get("port") or 3306
             database = connection.get("database") or ""
-            return f"jdbc:mysql://{host}:{port}/{database}"
+            return (
+                f"jdbc:mysql://{host}:{port}/{database}"
+                f"?allowPublicKeyRetrieval=true&useSSL=false"
+            )
 
         elif adapter_type == "sqlserver":
             host = connection.get("host") or ""

@@ -144,22 +144,34 @@ class FederationLoader:
             if config.full_refresh:
                 # Full refresh: DROP + CREATE (Spark will create)
                 self._log(f"Dropping {config.table_name}...")
-                try:
-                    adapter.execute(
+                adapter_type = adapter.type().lower()
+
+                # Build dialect-appropriate DROP TABLE statement.
+                # Oracle: no IF EXISTS, uses CASCADE CONSTRAINTS
+                # SQL Server: no CASCADE, use IF EXISTS
+                # Postgres/others: standard IF EXISTS + CASCADE
+                if adapter_type == "oracle":
+                    drop_variants = [
+                        f"DROP TABLE {quoted_table} CASCADE CONSTRAINTS",
+                        f"DROP TABLE {quoted_table}",
+                    ]
+                elif adapter_type in ("sqlserver", "synapse", "fabric"):
+                    drop_variants = [
+                        f"DROP TABLE IF EXISTS {quoted_table}",
+                    ]
+                else:
+                    drop_variants = [
                         f"DROP TABLE IF EXISTS {quoted_table} CASCADE",
-                        auto_begin=True,
-                    )
-                    ddl_executed = True
-                except Exception:
-                    # Try without CASCADE (some DBs don't support it)
+                        f"DROP TABLE IF EXISTS {quoted_table}",
+                    ]
+
+                for drop_sql in drop_variants:
                     try:
-                        adapter.execute(
-                            f"DROP TABLE IF EXISTS {quoted_table}",
-                            auto_begin=True,
-                        )
+                        adapter.execute(drop_sql, auto_begin=True)
                         ddl_executed = True
+                        break
                     except Exception:
-                        pass  # Table might not exist
+                        continue  # Try next variant
             elif config.truncate:
                 # Truncate: faster than DROP+CREATE, preserves structure
                 self._log(f"Truncating {config.table_name}...")
@@ -196,9 +208,9 @@ class FederationLoader:
                     adapter.execute(
                         f"CREATE SCHEMA IF NOT EXISTS {schema}", auto_begin=True
                     )
+                    self._commit(adapter)
                 except Exception:
                     pass  # Schema might already exist or we might not have permissions
-                self._commit(adapter)
 
     def _create_table_with_adapter(
         self,
@@ -229,11 +241,15 @@ class FederationLoader:
         with adapter.connection_named("dvt_loader"):
             try:
                 adapter.execute(create_sql, auto_begin=True)
+                # Only commit when DDL succeeded — a failed execute() causes
+                # the adapter's exception_handler to rollback, setting
+                # transaction_open=False. Committing after rollback raises
+                # DbtInternalError on non-PG adapters.
+                self._commit(adapter)
             except Exception as e:
-                # Table might already exist (IF NOT EXISTS not supported everywhere)
+                # Table might already exist (IF NOT EXISTS not supported
+                # everywhere, e.g. Oracle, SQL Server)
                 self._log(f"Create table note: {e}")
-            # Commit DDL so it's visible to other connections (JDBC)
-            self._commit(adapter)
 
     # =========================================================================
     # Spark JDBC Load

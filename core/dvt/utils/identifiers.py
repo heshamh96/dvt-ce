@@ -54,17 +54,25 @@ ADAPTER_TO_SQLGLOT: Dict[str, str] = {
 def quote_identifier(name: str, adapter_type: str) -> str:
     """Quote an identifier for a specific SQL dialect using SQLGlot.
 
-    Uses SQLGlot to generate properly quoted identifiers for the target
-    database dialect. This is useful when you need to preserve the original
-    column name with special characters.
+    Only force-quotes identifiers that *need* quoting — those containing
+    spaces, hyphens, dots, or other special characters that aren't valid
+    in an unquoted identifier.  Simple identifiers (alphanumeric + underscore,
+    starting with a letter or underscore) are left unquoted so the database's
+    default case-folding rules apply naturally.
+
+    This distinction is critical for case-sensitive databases like Oracle and
+    Snowflake that uppercase unquoted identifiers: quoting a lowercase name
+    like ``"amount"`` creates a case-sensitive lowercase column that cannot
+    be found by unquoted SQL references (``amount`` → ``AMOUNT`` ≠ ``amount``).
 
     Args:
         name: Identifier name to quote
         adapter_type: Target database adapter type (e.g., "postgres", "databricks")
 
     Returns:
-        Quoted identifier string (e.g., '"Customer Code"' for Postgres,
-        '`Customer Code`' for Databricks)
+        Quoted identifier string for names that need quoting
+        (e.g., '"Customer Code"' for Postgres, '`Customer Code`' for Databricks),
+        or the bare identifier for simple names (e.g., 'amount').
 
     Raises:
         ImportError: If SQLGlot is not available
@@ -74,6 +82,10 @@ def quote_identifier(name: str, adapter_type: str) -> str:
         '"Customer Code"'
         >>> quote_identifier("Customer Code", "databricks")
         '`Customer Code`'
+        >>> quote_identifier("amount", "oracle")
+        'amount'
+        >>> quote_identifier("amount", "postgres")
+        'amount'
     """
     if not SQLGLOT_AVAILABLE:
         raise ImportError(
@@ -86,8 +98,14 @@ def quote_identifier(name: str, adapter_type: str) -> str:
     # Get SQLGlot dialect name
     sqlglot_dialect = ADAPTER_TO_SQLGLOT.get(adapter_type.lower(), adapter_type.lower())
 
-    # Create quoted identifier and generate SQL
-    ident = sqlglot_exp.to_identifier(name, quoted=True)
+    # Only force-quote identifiers with special characters (spaces, hyphens,
+    # dots, etc.).  Simple alphanumeric+underscore names are left unquoted so
+    # the database's own case-folding rules apply (e.g., Oracle → UPPERCASE,
+    # Postgres → lowercase).
+    _SIMPLE_NAME = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+    needs_quoting = not _SIMPLE_NAME.match(name)
+
+    ident = sqlglot_exp.to_identifier(name, quoted=needs_quoting)
     return ident.sql(dialect=sqlglot_dialect)
 
 
@@ -140,10 +158,24 @@ def spark_type_to_sql_type(spark_type: Any, adapter_type: str) -> str:
     # Get the Spark type name
     type_name = spark_type.typeName()
 
+    # Dialect-aware string length — some databases have smaller VARCHAR limits:
+    #   Oracle: VARCHAR2(4000)
+    #   MySQL/MariaDB: VARCHAR(16383) in utf8mb4 row format
+    #   Others: VARCHAR(65535) is generally safe
+    at = adapter_type.lower()
+    if at == "oracle":
+        varchar_len = "4000"
+        varbinary_len = "4000"
+    elif at in ("mysql", "mariadb"):
+        varchar_len = "4000"
+        varbinary_len = "4000"
+    else:
+        varchar_len = "65535"
+        varbinary_len = "65535"
+
     # Map Spark type names to SQL type names
-    # Using VARCHAR(65535) for strings to handle large text fields
     sql_type_map = {
-        "string": "VARCHAR(65535)",
+        "string": f"VARCHAR({varchar_len})",
         "integer": "INTEGER",
         "long": "BIGINT",
         "double": "DOUBLE",
@@ -153,7 +185,7 @@ def spark_type_to_sql_type(spark_type: Any, adapter_type: str) -> str:
         "timestamp": "TIMESTAMP",
         "short": "SMALLINT",
         "byte": "TINYINT",
-        "binary": "VARBINARY(65535)",
+        "binary": f"VARBINARY({varbinary_len})",
     }
 
     # Handle decimal with precision/scale
@@ -224,7 +256,22 @@ def build_create_table_sql(df: Any, adapter_type: str, quoted_table_name: str) -
         col_defs.append(f"{col_name} {sql_type}")
 
     columns_sql = ",\n  ".join(col_defs)
-    create_sql = f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
+    at = adapter_type.lower()
+
+    # Oracle and SQL Server don't support IF NOT EXISTS on CREATE TABLE.
+    if at == "oracle":
+        create_sql = f"CREATE TABLE {quoted_table_name} (\n  {columns_sql}\n)"
+    elif at in ("sqlserver", "synapse", "fabric"):
+        # SQL Server: guard with IF NOT EXISTS via sys.tables check
+        create_sql = (
+            f"IF NOT EXISTS (SELECT 1 FROM sys.tables "
+            f"WHERE object_id = OBJECT_ID(N'{quoted_table_name}'))\n"
+            f"CREATE TABLE {quoted_table_name} (\n  {columns_sql}\n)"
+        )
+    else:
+        create_sql = (
+            f"CREATE TABLE IF NOT EXISTS {quoted_table_name} (\n  {columns_sql}\n)"
+        )
 
     # Delta Lake rejects column names with spaces unless Column Mapping is enabled.
     # Add TBLPROPERTIES for Databricks/Spark ONLY when columns have special chars.

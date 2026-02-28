@@ -164,8 +164,8 @@ class TestBuildMergeSql:
         """Postgres ON CONFLICT with single key column."""
         sql = self._build("postgres", unique_key=["id"])
         assert "ON CONFLICT" in sql
-        # Key should appear in conflict clause
-        assert '"id"' in sql
+        # Simple key names are unquoted
+        assert "(id)" in sql
 
     def test_postgres_multi_key(self):
         """Postgres ON CONFLICT with composite key."""
@@ -175,8 +175,8 @@ class TestBuildMergeSql:
             columns=["customer_code", "sku_code", "quantity"],
         )
         assert "ON CONFLICT" in sql
-        assert '"customer_code"' in sql
-        assert '"sku_code"' in sql
+        assert "customer_code" in sql
+        assert "sku_code" in sql
 
     def test_postgres_all_columns_are_keys(self):
         """When all columns are keys, UPDATE SET should still have something."""
@@ -271,8 +271,8 @@ class TestBuildMergeSql:
     def test_standard_on_clause_uses_keys(self):
         """ON clause should join on unique_key columns."""
         sql = self._build("databricks", unique_key=["id"])
-        # Databricks uses backtick quoting
-        assert "target.`id` = stg.`id`" in sql
+        # Simple names are unquoted
+        assert "target.id = stg.id" in sql
 
     def test_standard_multi_key_on_clause(self):
         """ON clause should AND-join multiple unique key columns."""
@@ -282,9 +282,9 @@ class TestBuildMergeSql:
             columns=["customer_code", "sku_code", "quantity"],
         )
         assert " AND " in sql
-        # Databricks uses backtick quoting
-        assert "target.`customer_code` = stg.`customer_code`" in sql
-        assert "target.`sku_code` = stg.`sku_code`" in sql
+        # Simple names are unquoted
+        assert "target.customer_code = stg.customer_code" in sql
+        assert "target.sku_code = stg.sku_code" in sql
 
     def test_standard_update_excludes_keys(self):
         """WHEN MATCHED UPDATE SET should only update non-key columns."""
@@ -293,9 +293,9 @@ class TestBuildMergeSql:
             unique_key=["id"],
             columns=["id", "customer_code", "quantity"],
         )
-        # Non-key columns should be in the SET clause (backtick quoting for databricks)
-        assert "target.`customer_code` = stg.`customer_code`" in sql
-        assert "target.`quantity` = stg.`quantity`" in sql
+        # Simple names are unquoted
+        assert "target.customer_code = stg.customer_code" in sql
+        assert "target.quantity = stg.quantity" in sql
 
     def test_standard_values_uses_stg_prefix(self):
         """INSERT VALUES should use stg.column references."""
@@ -310,8 +310,8 @@ class TestBuildMergeSql:
             columns=["id", "code"],
         )
         assert "WHEN MATCHED THEN UPDATE SET" in sql
-        # Should have a no-op update on the first key (backtick quoting for databricks)
-        assert "target.`id` = stg.`id`" in sql
+        # Simple names are unquoted
+        assert "target.id = stg.id" in sql
 
 
 # =============================================================================
@@ -369,7 +369,8 @@ class TestBuildDeleteInsertSql:
     def test_postgres_delete_matches_on_keys(self):
         """Postgres DELETE WHERE should match on unique key columns."""
         delete_sql, _ = self._build("postgres", unique_key=["id"])
-        assert '"id"' in delete_sql
+        # Simple names are unquoted
+        assert ".id = " in delete_sql
 
     def test_postgres_multi_key_delete(self):
         """Postgres DELETE with composite key uses AND-joined conditions."""
@@ -379,8 +380,8 @@ class TestBuildDeleteInsertSql:
             columns=["customer_code", "sku_code", "quantity"],
         )
         assert " AND " in delete_sql
-        assert '"customer_code"' in delete_sql
-        assert '"sku_code"' in delete_sql
+        assert "customer_code" in delete_sql
+        assert "sku_code" in delete_sql
 
     # --- Standard (Databricks, Snowflake, etc.) ---
 
@@ -409,9 +410,10 @@ class TestBuildDeleteInsertSql:
             unique_key=["a", "b", "c"],
             columns=["a", "b", "c", "val"],
         )
-        assert 'stg."a"' in delete_sql
-        assert 'stg."b"' in delete_sql
-        assert 'stg."c"' in delete_sql
+        # Simple names are unquoted
+        assert "stg.a" in delete_sql
+        assert "stg.b" in delete_sql
+        assert "stg.c" in delete_sql
 
     # --- INSERT (all dialects) ---
 
@@ -419,9 +421,10 @@ class TestBuildDeleteInsertSql:
         """INSERT should include all columns."""
         _, insert_sql = self._build("postgres", columns=["id", "name", "value"])
         assert "INSERT INTO" in insert_sql
-        assert '"id"' in insert_sql
-        assert '"name"' in insert_sql
-        assert '"value"' in insert_sql
+        # Simple names are unquoted
+        assert "id" in insert_sql
+        assert "name" in insert_sql
+        assert "value" in insert_sql
 
     def test_insert_selects_from_staging(self):
         """INSERT should SELECT from staging table."""

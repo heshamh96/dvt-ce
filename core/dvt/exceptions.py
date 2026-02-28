@@ -17,6 +17,24 @@ from dbt_common.exceptions import (
     scrub_secrets,
 )
 
+
+# Legacy exception aliases required by third-party adapters (dbt-mysql,
+# dbt-sqlserver, dbt-oracle) that still do ``import dbt.exceptions`` and
+# access these names via the dbt.* → dvt.* shim.
+class DbtDatabaseError(DbtRuntimeError):
+    """Database-level error (e.g. SQL syntax error, constraint violation)."""
+
+    CODE = 10003
+    MESSAGE = "Database Error"
+
+
+class FailedToConnectError(DbtRuntimeError):
+    """Raised when a database connection attempt fails."""
+
+    CODE = 10060
+    MESSAGE = "Failed to Connect"
+
+
 if TYPE_CHECKING:
     import agate
 

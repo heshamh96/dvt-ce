@@ -22,14 +22,35 @@ class TestQuoteIdentifier:
     """Tests for quote_identifier function using SQLGlot."""
 
     def test_postgres_double_quotes(self):
-        """Postgres should use double quotes."""
+        """Postgres should use double quotes for names with special chars."""
         assert quote_identifier("Customer Code", "postgres") == '"Customer Code"'
-        assert quote_identifier("normal", "postgres") == '"normal"'
+
+    def test_postgres_simple_name_unquoted(self):
+        """Simple names should be unquoted to let DB case-folding rules apply."""
+        assert quote_identifier("normal", "postgres") == "normal"
+        assert quote_identifier("amount", "postgres") == "amount"
 
     def test_databricks_backticks(self):
-        """Databricks should use backticks."""
+        """Databricks should use backticks for names with special chars."""
         assert quote_identifier("Customer Code", "databricks") == "`Customer Code`"
-        assert quote_identifier("normal", "databricks") == "`normal`"
+
+    def test_databricks_simple_name_unquoted(self):
+        """Simple names should be unquoted on Databricks too."""
+        assert quote_identifier("normal", "databricks") == "normal"
+
+    def test_oracle_simple_name_unquoted(self):
+        """Oracle simple names must be unquoted so Oracle uppercases them.
+
+        If we quoted lowercase names like "amount", Oracle stores them
+        case-sensitively as lowercase, breaking unquoted SQL references
+        (Oracle uppercases unquoted identifiers: amount -> AMOUNT != "amount").
+        """
+        assert quote_identifier("amount", "oracle") == "amount"
+        assert quote_identifier("created_at", "oracle") == "created_at"
+
+    def test_oracle_special_chars_quoted(self):
+        """Oracle names with special chars should still be quoted."""
+        assert quote_identifier("Customer Code", "oracle") == '"Customer Code"'
 
     def test_snowflake_double_quotes(self):
         """Snowflake should use double quotes."""
@@ -166,8 +187,8 @@ class TestSparkTypeToSqlType:
 class TestBuildCreateTableColumnTypes:
     """Tests for build_create_table_column_types function."""
 
-    def test_generates_quoted_column_defs_databricks(self):
-        """Should generate quoted columns for Databricks (backtick quoting)."""
+    def test_generates_column_defs_databricks(self):
+        """Simple column names should be unquoted in column type defs."""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
@@ -175,15 +196,16 @@ class TestBuildCreateTableColumnTypes:
             df = spark.createDataFrame([("Alice", 100)], ["Name", "Age"])
             result = build_create_table_column_types(df, "databricks")
 
-            assert "`Name`" in result
-            assert "`Age`" in result
+            # Simple names are unquoted
+            assert "Name " in result
+            assert "Age " in result
             assert "VARCHAR" in result or "STRING" in result
             assert "BIGINT" in result
         finally:
             spark.stop()
 
-    def test_generates_quoted_column_defs_postgres(self):
-        """Should generate quoted columns for Postgres (double-quote quoting)."""
+    def test_generates_column_defs_postgres(self):
+        """Simple column names should be unquoted in column type defs."""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
@@ -191,8 +213,9 @@ class TestBuildCreateTableColumnTypes:
             df = spark.createDataFrame([("Alice", 100)], ["Name", "Age"])
             result = build_create_table_column_types(df, "postgres")
 
-            assert '"Name"' in result
-            assert '"Age"' in result
+            # Simple names are unquoted
+            assert "Name " in result
+            assert "Age " in result
         finally:
             spark.stop()
 
@@ -207,9 +230,11 @@ class TestBuildCreateTableColumnTypes:
             )
             result = build_create_table_column_types(df, "databricks")
 
+            # Names with spaces are quoted
             assert "`Customer Name`" in result
             assert "`Total Quantity`" in result
-            assert "`Price`" in result
+            # Simple name is unquoted
+            assert "Price " in result
         finally:
             spark.stop()
 
@@ -236,7 +261,7 @@ class TestBuildCreateTableSql:
     """
 
     def test_postgres_simple_columns(self):
-        """Postgres CREATE TABLE with simple column names."""
+        """Postgres CREATE TABLE with simple column names (unquoted)."""
         from pyspark.sql import SparkSession
 
         spark = SparkSession.builder.appName("test").master("local[1]").getOrCreate()
@@ -245,8 +270,9 @@ class TestBuildCreateTableSql:
             result = build_create_table_sql(df, "postgres", '"public"."users"')
 
             assert 'CREATE TABLE IF NOT EXISTS "public"."users"' in result
-            assert '"name"' in result
-            assert '"age"' in result
+            # Simple column names should be unquoted
+            assert "name " in result  # "name VARCHAR..."
+            assert "age " in result  # "age BIGINT"
         finally:
             spark.stop()
 
@@ -309,9 +335,11 @@ class TestBuildCreateTableSql:
             df = spark.createDataFrame([], schema)
             result = build_create_table_sql(df, "postgres", '"public"."products"')
 
+            # Names with spaces are quoted
             assert '"Product Name"' in result
             assert '"Unit Price"' in result
-            assert '"Quantity"' in result
+            # Simple name is unquoted
+            assert "Quantity " in result
             assert "VARCHAR" in result
             assert "DOUBLE PRECISION" in result
             assert "BIGINT" in result
@@ -399,7 +427,8 @@ class TestBuildCreateTableSql:
 
             assert "TBLPROPERTIES" not in result
             assert "CREATE TABLE IF NOT EXISTS" in result
-            assert "`customer_name`" in result
+            # Simple names are unquoted
+            assert "customer_name " in result
         finally:
             spark.stop()
 
