@@ -523,6 +523,7 @@ class DvtDebugTask(DebugTask):
             )
 
             # Test connection
+            err_detail: Optional[str] = None
             try:
                 prof = Profile.from_raw_profile_info(
                     profile,
@@ -531,7 +532,11 @@ class DvtDebugTask(DebugTask):
                     target_override=target_name,
                 )
                 err = self.attempt_connection(prof)
-                status = green("✓ OK") if err is None else red("✗ error")
+                if err is None:
+                    status = green("✓ OK")
+                else:
+                    status = red("✗ error")
+                    err_detail = err
             except Exception as e:
                 err_str = str(e)
                 if "No module named" in err_str or "Could not find adapter" in err_str:
@@ -540,6 +545,7 @@ class DvtDebugTask(DebugTask):
                         missing_adapters.add(adapter_type)
                 else:
                     status = red("✗ error")
+                    err_detail = err_str
 
             fire_event(
                 DebugCmdOut(
@@ -549,6 +555,14 @@ class DvtDebugTask(DebugTask):
                     )
                 )
             )
+            if err_detail:
+                # Show first meaningful line of the error, trimmed to table width
+                first_line = err_detail.strip().split("\n")[0]
+                fire_event(
+                    DebugCmdOut(
+                        msg=red(f"  └─ {_truncate(first_line, TABLE_WIDTH - 8)}")
+                    )
+                )
 
         fire_event(DebugCmdOut(msg=_table_footer()))
 
@@ -619,6 +633,7 @@ class DvtDebugTask(DebugTask):
                     or "N/A"
                 )
 
+                err_detail: Optional[str] = None
                 try:
                     prof = Profile.from_raw_profile_info(
                         profile,
@@ -627,7 +642,11 @@ class DvtDebugTask(DebugTask):
                         target_override=target_name,
                     )
                     err = self.attempt_connection(prof)
-                    status = green("✓ OK") if err is None else red("✗ error")
+                    if err is None:
+                        status = green("✓ OK")
+                    else:
+                        status = red("✗ error")
+                        err_detail = err
                 except Exception as e:
                     err_str = str(e)
                     if (
@@ -639,6 +658,7 @@ class DvtDebugTask(DebugTask):
                             missing_adapters.add(adapter_type)
                     else:
                         status = red("✗ error")
+                        err_detail = err_str
 
                 fire_event(
                     DebugCmdOut(
@@ -653,6 +673,13 @@ class DvtDebugTask(DebugTask):
                         )
                     )
                 )
+                if err_detail:
+                    first_line = err_detail.strip().split("\n")[0]
+                    fire_event(
+                        DebugCmdOut(
+                            msg=red(f"  └─ {_truncate(first_line, TABLE_WIDTH - 8)}")
+                        )
+                    )
 
             fire_event(DebugCmdOut(msg=_table_footer()))
 

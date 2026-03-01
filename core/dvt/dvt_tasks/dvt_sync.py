@@ -210,6 +210,143 @@ def _run_uv_pip_uninstall(env_path: Path, packages: List[str]) -> bool:
         return False
 
 
+def _silent_pip(env_python: Path, args: List[str], timeout: int = 120) -> bool:
+    """Run python -m pip with all output suppressed. For internal housekeeping only."""
+    cmd = [str(env_python), "-m", "pip"] + args
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _silent_uv_pip(env_path: Path, args: List[str], timeout: int = 120) -> bool:
+    """Run uv pip with all output suppressed. For internal housekeeping only."""
+    env_python = _get_env_python(env_path)
+    cmd = ["uv", "pip"] + args + ["--python", str(env_python)]
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=timeout,
+        )
+        return result.returncode == 0
+    except Exception:
+        return False
+
+
+def _is_package_installed(env_path: Path, package: str) -> bool:
+    """Check if a package is installed in the given env (by looking for dist-info)."""
+    site_dirs = list(env_path.glob("lib/python*/site-packages"))
+    if not site_dirs:
+        # Windows layout
+        site_dirs = list(env_path.glob("Lib/site-packages"))
+    for site in site_dirs:
+        # dist-info directory names use underscores: dbt_core-1.11.6.dist-info
+        normalized = package.replace("-", "_")
+        if list(site.glob(f"{normalized}-*.dist-info")):
+            return True
+    return False
+
+
+def _plant_dbt_core_metadata(env_path: Path, dvt_version: str) -> None:
+    """Create a stub dbt_core dist-info so importlib.metadata.version("dbt-core") works.
+
+    Some community adapters (notably dbt-databricks) call
+    ``importlib.metadata.version("dbt-core")`` at module load time.
+    Since DVT replaces dbt-core, we plant minimal package metadata that
+    reports DVT's own version.  No actual dbt-core code is installed.
+    """
+    site_dirs = list(env_path.glob("lib/python*/site-packages"))
+    if not site_dirs:
+        site_dirs = list(env_path.glob("Lib/site-packages"))
+    if not site_dirs:
+        return
+
+    site = site_dirs[0]
+    dist_dir = site / f"dbt_core-{dvt_version}.dist-info"
+    dist_dir.mkdir(exist_ok=True)
+
+    # Minimal METADATA (PEP 566) — just enough for importlib.metadata
+    metadata_content = (
+        "Metadata-Version: 2.1\n"
+        f"Name: dbt-core\n"
+        f"Version: {dvt_version}\n"
+        "Summary: Provided by dvt-core (stub metadata only)\n"
+    )
+    (dist_dir / "METADATA").write_text(metadata_content)
+
+    # INSTALLER marker
+    (dist_dir / "INSTALLER").write_text("dvt-sync\n")
+
+    # Empty RECORD (no files owned)
+    (dist_dir / "RECORD").write_text("")
+
+
+def _repair_dbt_namespace(env_path: Path, env_python: Path, pkg_manager: str) -> None:
+    """Remove dbt-core (pulled in by community adapters) and repair dbt-adapters.
+
+    Community adapters (dbt-postgres, dbt-mysql, etc.) declare dbt-core as a
+    dependency.  When installed, dbt-core writes files into the dbt/ namespace
+    that collide with dbt-adapters, causing critical files like factory.py to
+    go missing.  DVT replaces dbt-core via its reverse shim, so dbt-core must
+    not be present.
+
+    After cleanup, a stub dist-info is planted so that
+    ``importlib.metadata.version("dbt-core")`` still works (some adapters
+    like dbt-databricks check it at import time).
+
+    This function runs silently — no output is shown to the user.
+    """
+    if not _is_package_installed(env_path, "dbt-core"):
+        return
+
+    # Check if this is already our stub (INSTALLER == "dvt-sync")
+    site_dirs = list(env_path.glob("lib/python*/site-packages"))
+    if not site_dirs:
+        site_dirs = list(env_path.glob("Lib/site-packages"))
+    for site in site_dirs:
+        for dist in site.glob("dbt_core-*.dist-info"):
+            installer = dist / "INSTALLER"
+            if installer.exists() and installer.read_text().strip() == "dvt-sync":
+                return  # Already our stub — nothing to do
+
+    # 1. Remove dbt-core
+    if pkg_manager == "uv":
+        ok = _silent_uv_pip(env_path, ["uninstall", "dbt-core"])
+        if not ok:
+            _silent_pip(env_python, ["uninstall", "dbt-core", "-y"])
+    else:
+        _silent_pip(env_python, ["uninstall", "dbt-core", "-y"])
+
+    # 2. Reinstall dbt-adapters (--no-deps so it doesn't pull dbt-core back)
+    #    to restore any files that were clobbered (factory.py, protocol.py, base/, sql/, etc.)
+    if pkg_manager == "uv":
+        ok = _silent_uv_pip(
+            env_path, ["install", "--reinstall", "--no-deps", "dbt-adapters"]
+        )
+        if not ok:
+            _silent_pip(
+                env_python,
+                ["install", "--force-reinstall", "--no-deps", "dbt-adapters"],
+            )
+    else:
+        _silent_pip(
+            env_python, ["install", "--force-reinstall", "--no-deps", "dbt-adapters"]
+        )
+
+    # 3. Plant stub dbt-core metadata so importlib.metadata.version("dbt-core") works
+    from dvt.version import __version__ as dvt_version
+
+    _plant_dbt_core_metadata(env_path, dvt_version)
+
+
 def _detect_package_manager(env_python: Path) -> str:
     """Return 'uv' if uv is available and env looks uv-managed, else 'pip'."""
     try:
@@ -649,6 +786,12 @@ class DvtSyncTask(BaseTask):
                         f"(e.g. FreeTDS for sqlserver, libpq for postgres)."
                     )
                 )
+
+        # 3b) Namespace repair: community adapters pull in dbt-core as a
+        #      dependency which clobbers files from dbt-adapters (factory.py,
+        #      protocol.py, base/, sql/).  DVT replaces dbt-core via its
+        #      reverse shim, so silently remove it and restore dbt-adapters.
+        _repair_dbt_namespace(env_path, env_python, pkg_manager)
 
         # 4) Pyspark: single version from active target.
         # Uses --computes-dir if provided, otherwise falls back to --profiles-dir / ~/.dvt/.
