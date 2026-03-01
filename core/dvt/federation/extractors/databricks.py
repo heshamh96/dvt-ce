@@ -1,10 +1,11 @@
 """
 Databricks extractor for EL layer.
 
-Supports native COPY INTO for cloud storage (S3, GCS, Azure, HDFS).
-Falls back to Spark JDBC for local filesystem.
+Extraction method: Spark JDBC (parallel reads).
 
-Uses CloudStorageHelper for unified cloud path and credential handling.
+Legacy native COPY INTO (_extract_native_parallel) and cursor-based
+(_extract_native_cursor) methods are retained for potential future
+opt-in use but are NOT called by default.
 """
 
 import time
@@ -89,25 +90,8 @@ class DatabricksExtractor(BaseExtractor):
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract data from Databricks to Parquet."""
-        bucket_config = config.bucket_config
-        bucket_type = bucket_config.get("type") if bucket_config else None
-
-        if bucket_type and bucket_config and self.supports_native_export(bucket_type):
-            try:
-                return self._extract_native_parallel(config, bucket_config, output_path)
-            except Exception as e:
-                self._log(
-                    f"COPY INTO failed ({e}), falling back to cursor extraction..."
-                )
-
-        # For local filesystem, use native cursor-based extraction
-        # (avoids dependency on SparkManager)
-        try:
-            return self._extract_native_cursor(config, output_path)
-        except Exception as e:
-            self._log(f"Cursor extraction failed ({e}), falling back to Spark JDBC...")
-            return self._extract_jdbc(config, output_path)
+        """Extract data from Databricks to Parquet via Spark JDBC."""
+        return self._extract_jdbc(config, output_path)
 
     def _extract_native_cursor(
         self,

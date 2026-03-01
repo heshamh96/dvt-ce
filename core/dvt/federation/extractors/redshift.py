@@ -1,10 +1,10 @@
 """
 Redshift extractor for EL layer.
 
-Supports native UNLOAD for S3 buckets.
-Falls back to Spark JDBC for other targets.
+Extraction method: Spark JDBC (parallel reads).
 
-Uses CloudStorageHelper for unified cloud path and credential handling.
+Legacy native UNLOAD method (_extract_native_parallel) is retained
+for potential future opt-in use but is NOT called by default.
 """
 
 import time
@@ -89,16 +89,7 @@ class RedshiftExtractor(BaseExtractor):
         config: ExtractionConfig,
         output_path: Path,
     ) -> ExtractionResult:
-        """Extract data from Redshift to Parquet."""
-        bucket_config = config.bucket_config
-        bucket_type = bucket_config.get("type") if bucket_config else None
-
-        if bucket_type and bucket_config and self.supports_native_export(bucket_type):
-            try:
-                return self._extract_native_parallel(config, bucket_config, output_path)
-            except Exception as e:
-                self._log(f"UNLOAD failed ({e}), falling back to Spark JDBC...")
-
+        """Extract data from Redshift to Parquet via Spark JDBC."""
         return self._extract_jdbc(config, output_path)
 
     def _extract_native_parallel(

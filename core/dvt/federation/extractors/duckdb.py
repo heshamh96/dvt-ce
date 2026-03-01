@@ -1,8 +1,10 @@
 """
 DuckDB extractor for EL layer.
 
-Uses native COPY for Parquet export (fast).
-Falls back to Spark JDBC if COPY fails.
+Extraction method: Spark JDBC (parallel reads).
+
+Legacy COPY method (_extract_copy) is retained for potential
+future opt-in use but is NOT called by default.
 """
 
 import time
@@ -70,12 +72,8 @@ class DuckDBExtractor(BaseExtractor):
         return self._lazy_connection
 
     def extract(self, config: ExtractionConfig, output_path: Path) -> ExtractionResult:
-        """Extract data from DuckDB to Parquet using COPY."""
-        try:
-            return self._extract_copy(config, output_path)
-        except Exception as e:
-            self._log(f"COPY failed ({e}), falling back to Spark JDBC...")
-            return self._extract_jdbc(config, output_path)
+        """Extract data from DuckDB to Parquet via Spark JDBC."""
+        return self._extract_jdbc(config, output_path)
 
     def _extract_copy(
         self, config: ExtractionConfig, output_path: Path
