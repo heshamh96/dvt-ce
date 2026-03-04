@@ -96,6 +96,73 @@ class BaseExtractor(ABC):
         if cap is None:
             return None
 
+    def _wrap_query_with_string_casts(
+        self,
+        query: str,
+        config: ExtractionConfig,
+        jdbc_url: str,
+        jdbc_driver: str,
+        jdbc_props: Dict[str, str],
+    ) -> str:
+        """Wrap a Databricks extraction query to CAST all columns to STRING.
+
+        The Databricks JDBC driver has a bug where getInt() fails on certain
+        column values ('Error converting value to int'). By wrapping the query
+        with explicit CAST(col AS STRING) for each column, we force the driver
+        to use getString() instead, avoiding the type conversion error.
+
+        Column names are obtained by running a LIMIT 0 query to get metadata
+        without reading actual data.
+
+        Args:
+            query: Original extraction query
+            config: Extraction configuration
+            jdbc_url: JDBC URL for the connection
+            jdbc_driver: JDBC driver class name
+            jdbc_props: JDBC authentication properties
+
+        Returns:
+            Modified query with CAST wrappers, or original query on failure
+        """
+        try:
+            from dvt.federation.spark_manager import SparkManager
+
+            spark = SparkManager.get_instance().get_or_create_session()
+
+            # Read schema only (LIMIT 0) to get column names without
+            # triggering the type conversion error
+            schema_query = f"SELECT * FROM ({query}) AS _schema_probe WHERE 1=0"
+            schema_dbtable = f"({schema_query}) AS dvt_schema"
+
+            schema_df = (
+                spark.read.format("jdbc")
+                .option("url", jdbc_url)
+                .option("driver", jdbc_driver)
+                .option("dbtable", schema_dbtable)
+                .options(**jdbc_props)
+                .load()
+            )
+
+            columns = schema_df.columns
+            if not columns:
+                return query
+
+            # Build CAST wrappers: CAST(`col_name` AS STRING) AS `col_name`
+            cast_exprs = [f"CAST(`{col}` AS STRING) AS `{col}`" for col in columns]
+            wrapped = f"SELECT {', '.join(cast_exprs)} FROM ({query}) AS _dvt_cast"
+
+            self._log(
+                f"  Wrapped Databricks query with STRING casts ({len(columns)} columns)"
+            )
+            return wrapped
+
+        except Exception as e:
+            self._log(
+                f"  Warning: Could not wrap Databricks query with casts: {e}. "
+                f"Using original query."
+            )
+            return query
+
         with cls._extract_locks_init:
             if key not in cls._extract_locks:
                 cls._extract_locks[key] = threading.Semaphore(cap)
@@ -553,6 +620,17 @@ class BaseExtractor(ABC):
 
             # Build query
             query = self.build_export_query(config)
+
+            # Databricks JDBC driver bug: getInt() fails on certain column
+            # values (Error converting value to int). Wrap the query to CAST
+            # all columns to STRING, avoiding type-conversion errors in the
+            # JDBC driver. Spark reads everything as StringType, which is
+            # safe for staging (downstream Spark SQL handles type coercion).
+            if adapter_type == "databricks":
+                query = self._wrap_query_with_string_casts(
+                    query, config, jdbc_url, jdbc_driver, jdbc_props
+                )
+
             # Oracle doesn't support AS for subquery aliases; omit AS for Oracle
             if adapter_type == "oracle":
                 dbtable = f"({query}) dvt_extract"

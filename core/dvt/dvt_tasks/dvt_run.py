@@ -10,6 +10,7 @@ The base RunTask in dvt.task.run remains identical to upstream dbt-core.
 
 from __future__ import annotations
 
+import threading
 from typing import AbstractSet, Dict, Optional, Type
 
 from dvt.adapters.base import BaseAdapter
@@ -52,6 +53,7 @@ class DvtRunTask(RunTask):
         self._resolved_executions: Dict[str, ResolvedExecution] = {}
         self._spark_initialized: bool = False
         self._federation_count: int = 0
+        self._federation_semaphore: Optional[threading.Semaphore] = None
 
         # Use DVT compiler for target-aware compilation
         self.compiler = DvtCompiler(self.config)
@@ -138,6 +140,7 @@ class DvtRunTask(RunTask):
                     num_nodes=self.num_nodes,
                     resolution=resolution,
                     manifest=self.manifest,
+                    federation_semaphore=self._federation_semaphore,
                 )
 
             # Pushdown on a non-default target
@@ -232,10 +235,22 @@ class DvtRunTask(RunTask):
             SparkManager.get_instance().get_or_create_session("DVT-Run")
             self._spark_initialized = True
 
+            # Create federation concurrency semaphore.
+            # max_federation_threads controls how many federation models can
+            # execute simultaneously through the shared Spark JVM.
+            # Default: 1 (serialized) — prevents JVM OOM / segfault.
+            max_fed_threads = compute_config.get("max_federation_threads", 1)
+            try:
+                max_fed_threads = max(1, int(max_fed_threads))
+            except (TypeError, ValueError):
+                max_fed_threads = 1
+            self._federation_semaphore = threading.Semaphore(max_fed_threads)
+
             fire_event(
                 Formatting(
                     msg=f"Initialized Spark session for federation "
-                    f"({self._federation_count} models)"
+                    f"({self._federation_count} models, "
+                    f"max concurrent: {max_fed_threads})"
                 )
             )
 

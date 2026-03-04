@@ -153,11 +153,16 @@ class DvtRunnerMixin:
     def _fix_node_schema_for_target(self, target_adapter) -> None:
         """Override node schema/database to match the target adapter credentials.
 
-        When a federation model's config.target differs from the profile default,
-        the node's schema and database are set from the default target (wrong).
-        This method corrects them to the target adapter's values.
+        When a model's config.target differs from the profile default, the
+        node's schema and database are set from the default target at parse
+        time (wrong).  This method ALWAYS corrects them to the target
+        adapter's credential values.
 
-        For MySQL/MariaDB: database must equal schema (or be unset).
+        This is safe because this method is only called for non-default
+        target runners — the model is being sent to a DIFFERENT database
+        engine where the default schema ('public') is meaningless.
+
+        For MySQL/MariaDB: database must equal schema.
         For MSSQL: schema is typically 'dbo', not 'public'.
         For Oracle: schema is typically the user (e.g., 'SYSTEM').
         """
@@ -165,12 +170,7 @@ class DvtRunnerMixin:
         target_schema = getattr(creds, "schema", None)
         target_database = getattr(creds, "database", None)
 
-        # Only override if the model doesn't have an explicit custom schema
-        model_has_custom_schema = getattr(
-            getattr(self.node, "config", None), "schema", None
-        )
-
-        if not model_has_custom_schema and target_schema:
+        if target_schema:
             self.node.schema = target_schema
 
         if target_database is not None:

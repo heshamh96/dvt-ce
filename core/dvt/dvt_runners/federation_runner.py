@@ -40,10 +40,12 @@ class FederationModelRunner(DvtRunnerMixin, CompileRunner):
         num_nodes: int,
         resolution: ResolvedExecution,
         manifest: Manifest,
+        federation_semaphore: Optional[threading.Semaphore] = None,
     ):
         super().__init__(config, adapter, node, node_index, num_nodes)
         self._init_dvt_runner(resolution, manifest)
         self._federation_engine: Optional[FederationEngine] = None
+        self._federation_semaphore = federation_semaphore
 
     def describe_node(self) -> str:
         upstream_targets = ", ".join(sorted(self.resolution.upstream_targets))
@@ -76,7 +78,14 @@ class FederationModelRunner(DvtRunnerMixin, CompileRunner):
         )
 
     def execute(self, model: ModelNode, manifest: Manifest) -> RunResult:
-        """Execute model via federation engine."""
+        """Execute model via federation engine.
+
+        If a federation semaphore is set, the actual Spark work is gated
+        behind it so that at most ``max_federation_threads`` federation
+        models execute concurrently through the shared JVM.  The runner
+        is still submitted to the thread pool immediately (DAG order
+        preserved); it simply blocks here until a slot is available.
+        """
         from dvt.events.types import LogModelResult
         from dbt_common.events.types import Formatting
 
@@ -98,6 +107,31 @@ class FederationModelRunner(DvtRunnerMixin, CompileRunner):
                 ),
                 level=EventLevel.WARN,
             )
+
+        # --- Federation concurrency gate ---
+        sem = self._federation_semaphore
+        if sem is not None:
+            fire_event(
+                Formatting(
+                    msg=f"  Federation slot requested for {model.name} "
+                    f"(thread {threading.current_thread().name})"
+                )
+            )
+            sem.acquire()
+            fire_event(Formatting(msg=f"  Federation slot acquired for {model.name}"))
+
+        try:
+            return self._run_federation(model, manifest)
+        finally:
+            if sem is not None:
+                sem.release()
+                fire_event(
+                    Formatting(msg=f"  Federation slot released for {model.name}")
+                )
+
+    def _run_federation(self, model: ModelNode, manifest: Manifest) -> RunResult:
+        """Core federation execution — extract, transform, load."""
+        from dbt_common.events.types import Formatting
 
         def on_progress(msg: str) -> None:
             fire_event(Formatting(msg=f"  {msg}"))

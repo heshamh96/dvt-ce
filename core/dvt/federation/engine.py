@@ -229,6 +229,14 @@ class FederationEngine:
                 f"from {extraction_result.get('sources_extracted', 0)} sources"
             )
 
+            # 9a. Extract ref model data (for transitive deps through ephemerals).
+            # Models referenced by ephemeral CTEs live in external databases
+            # and need to be extracted to staging before Spark can use them.
+            self._extract_ref_models(
+                model=model,
+                el_layer=el_layer,
+            )
+
             # 10. Register staged data as Spark temp views
             self._register_temp_views(
                 spark=spark,
@@ -360,33 +368,103 @@ class FederationEngine:
         nodes = getattr(model.depends_on, "nodes", []) or []
 
         for dep_id in nodes:
-            if not dep_id.startswith("source."):
-                continue
+            if dep_id.startswith("source."):
+                source = self.manifest.sources.get(dep_id)
+                if not source:
+                    continue
 
-            source = self.manifest.sources.get(dep_id)
-            if not source:
-                continue
+                alias = source_mappings.get(dep_id, source.name)
+                view_name = f"{view_prefix}{alias}"
 
-            alias = source_mappings.get(dep_id, source.name)
-            view_name = f"{view_prefix}{alias}"
+                database = getattr(source, "database", None) or ""
+                schema = source.schema or ""
+                table = source.name
 
-            database = getattr(source, "database", None) or ""
-            schema = source.schema or ""
-            table = source.name
+                # 3-part: db.schema.table
+                if database and schema:
+                    view_mappings[f"{database}.{schema}.{table}"] = view_name
+                # 2-part: schema.table
+                if schema:
+                    view_mappings[f"{schema}.{table}"] = view_name
+                # 1-part: just table name
+                view_mappings[table] = view_name
+                # Also map the alias if different
+                if alias and alias != table:
+                    view_mappings[alias] = view_name
 
-            # 3-part: db.schema.table
-            if database and schema:
-                view_mappings[f"{database}.{schema}.{table}"] = view_name
-            # 2-part: schema.table
-            if schema:
-                view_mappings[f"{schema}.{table}"] = view_name
-            # 1-part: just table name
-            view_mappings[table] = view_name
-            # Also map the alias if different
-            if alias and alias != table:
-                view_mappings[alias] = view_name
+            elif dep_id.startswith("model."):
+                # Handle ref() model dependencies.
+                # When a federation model references another model via ref(),
+                # that model's output needs to be read from Delta staging
+                # (not from the original database). Register a view mapping
+                # so _translate_to_spark() rewrites the table reference.
+                #
+                # Ephemeral models are inlined as CTEs, but their OWN
+                # dependencies (non-ephemeral models) still appear as table
+                # references inside the CTE SQL. We must recursively resolve
+                # through ephemeral models to find all non-ephemeral refs.
+                resolved_refs = self._resolve_model_refs_through_ephemerals(dep_id)
+                for ref_node in resolved_refs:
+                    ref_name = ref_node.name
+                    view_name = f"{view_prefix}{ref_name}"
+
+                    database = getattr(ref_node, "database", None) or ""
+                    schema = getattr(ref_node, "schema", None) or ""
+
+                    # 3-part: db.schema.table
+                    if database and schema:
+                        view_mappings[f"{database}.{schema}.{ref_name}"] = view_name
+                    # 2-part: schema.table
+                    if schema:
+                        view_mappings[f"{schema}.{ref_name}"] = view_name
+                    # 1-part: just table name
+                    view_mappings[ref_name] = view_name
 
         return view_mappings
+
+    def _resolve_model_refs_through_ephemerals(
+        self, dep_id: str, _visited: Optional[set] = None
+    ) -> list:
+        """Resolve a model dependency, recursing through ephemeral models.
+
+        If dep_id points to an ephemeral model, recursively walk its
+        depends_on.nodes to find all non-ephemeral model dependencies.
+        Returns a list of non-ephemeral model nodes that need view mappings.
+
+        Args:
+            dep_id: Model unique_id (e.g., 'model.Coke_DB.some_model')
+            _visited: Set of already-visited IDs to prevent infinite loops
+
+        Returns:
+            List of non-ephemeral ModelNode objects
+        """
+        if _visited is None:
+            _visited = set()
+        if dep_id in _visited:
+            return []
+        _visited.add(dep_id)
+
+        ref_node = self.manifest.nodes.get(dep_id)
+        if not ref_node:
+            return []
+
+        mat = getattr(getattr(ref_node, "config", None), "materialized", None)
+        if mat != "ephemeral":
+            # Non-ephemeral — this is an actual table/view we need to register
+            return [ref_node]
+
+        # Ephemeral model: recurse into its own dependencies
+        results = []
+        child_nodes = getattr(getattr(ref_node, "depends_on", None), "nodes", []) or []
+        for child_id in child_nodes:
+            if child_id.startswith("model."):
+                results.extend(
+                    self._resolve_model_refs_through_ephemerals(child_id, _visited)
+                )
+            # source. deps are handled separately — they appear in the
+            # parent model's depends_on already or in the CTE SQL, and
+            # the source extraction path handles them.
+        return results
 
     def _fetch_source_schemas(
         self,
@@ -658,6 +736,91 @@ class FederationEngine:
             "errors": result.errors,
         }
 
+    def _extract_ref_models(
+        self,
+        model: Any,
+        el_layer: ELLayer,
+    ) -> None:
+        """Extract ref model data for transitive dependencies through ephemerals.
+
+        When a federation model references an ephemeral model that itself refs
+        a non-ephemeral model, the non-ephemeral model's data needs to be in
+        staging so it can be registered as a Spark temp view.
+
+        Unlike source extraction (which is always needed), ref model extraction
+        is only needed when the ref model's data isn't already in staging.
+        Models that previously ran on the federation path already have staging.
+        Models that run via adapter pushdown (standard path) don't — we need
+        to extract their data via JDBC.
+
+        Args:
+            model: The federation model being executed
+            el_layer: EL layer for staging operations
+        """
+        if not hasattr(model, "depends_on") or not model.depends_on:
+            return
+
+        nodes = getattr(model.depends_on, "nodes", []) or []
+
+        for dep_id in nodes:
+            if not dep_id.startswith("model."):
+                continue
+
+            # Resolve through ephemerals to find actual table-backed models
+            resolved_refs = self._resolve_model_refs_through_ephemerals(dep_id)
+
+            for ref_node in resolved_refs:
+                model_staging_id = self._get_model_staging_id(ref_node)
+
+                # Skip if staging already exists (model ran on federation path,
+                # or was extracted by a previous model in this run)
+                if el_layer.staging_exists(model_staging_id):
+                    continue
+
+                # Need to extract from the model's database
+                ref_target = getattr(getattr(ref_node, "config", None), "target", None)
+                if not ref_target:
+                    ref_target = self._get_default_target()
+
+                connection_config = self._get_connection_config(ref_target)
+                if not connection_config:
+                    self._log(
+                        f"  Warning: No connection for ref model {ref_node.name} "
+                        f"target {ref_target}"
+                    )
+                    continue
+
+                ref_schema = getattr(ref_node, "schema", None) or ""
+                ref_name = ref_node.name
+
+                self._log(
+                    f"  Extracting ref model {ref_name} from {ref_target} "
+                    f"({ref_schema}.{ref_name})..."
+                )
+
+                # Build a SourceConfig to use the existing extraction pipeline
+                source_cfg = SourceConfig(
+                    source_name=model_staging_id,
+                    adapter_type=connection_config.get("type", ""),
+                    schema=ref_schema,
+                    table=ref_name,
+                    connection=None,
+                    connection_config=connection_config,
+                )
+
+                full_refresh = getattr(
+                    getattr(self.config, "args", None), "FULL_REFRESH", False
+                )
+                result = el_layer.extract_sources_parallel(
+                    [source_cfg], full_refresh=full_refresh
+                )
+
+                if not result.success:
+                    self._log(
+                        f"  Warning: Failed to extract ref model {ref_name}: "
+                        f"{result.errors}"
+                    )
+
     def _register_temp_views(
         self,
         spark: Any,
@@ -694,36 +857,72 @@ class FederationEngine:
         nodes = getattr(model.depends_on, "nodes", []) or []
 
         for dep_id in nodes:
-            if not dep_id.startswith("source."):
-                continue
+            if dep_id.startswith("source."):
+                source = self.manifest.sources.get(dep_id)
+                if not source:
+                    continue
 
-            source = self.manifest.sources.get(dep_id)
-            if not source:
-                continue
+                # Get staging path
+                staging_path = el_layer.get_staging_path(dep_id)
+                if not el_layer.staging_exists(dep_id):
+                    self._log(f"  Warning: No staging data for {dep_id}")
+                    continue
 
-            # Get staging path
-            staging_path = el_layer.get_staging_path(dep_id)
-            if not el_layer.staging_exists(dep_id):
-                self._log(f"  Warning: No staging data for {dep_id}")
-                continue
+                # Read staging data (auto-detect Delta vs legacy Parquet)
+                staging_path_obj = Path(str(staging_path))
+                try:
+                    if (
+                        staging_path_obj.is_dir()
+                        and (staging_path_obj / "_delta_log").is_dir()
+                    ):
+                        df = spark.read.format("delta").load(str(staging_path))
+                    else:
+                        df = spark.read.parquet(str(staging_path))
+                except Exception as e:
+                    self._log(f"  Warning: Could not read staging for {dep_id}: {e}")
+                    continue
 
-            # Read staging data (auto-detect Delta vs legacy Parquet)
-            staging_path_obj = Path(str(staging_path))
-            try:
-                if staging_path_obj.is_dir() and (staging_path_obj / "_delta_log").is_dir():
-                    df = spark.read.format("delta").load(str(staging_path))
-                else:
-                    df = spark.read.parquet(str(staging_path))
-            except Exception as e:
-                self._log(f"  Warning: Could not read staging for {dep_id}: {e}")
-                continue
+                # Create temp view with unique prefix
+                alias = source_mappings.get(dep_id, source.name)
+                view_name = f"{view_prefix}{alias}"
+                df.createOrReplaceTempView(view_name)
 
-            # Create temp view with unique prefix
-            alias = source_mappings.get(dep_id, source.name)
-            view_name = f"{view_prefix}{alias}"
-            df.createOrReplaceTempView(view_name)
+                self._log(f"  Registered temp view: {view_name}")
 
-            self._log(f"  Registered temp view: {view_name}")
+            elif dep_id.startswith("model."):
+                # Handle ref() model dependencies — read from model staging.
+                # Recurse through ephemeral models to find actual tables.
+                resolved_refs = self._resolve_model_refs_through_ephemerals(dep_id)
+                for ref_node in resolved_refs:
+                    # Model staging uses model unique_id as the staging key
+                    model_staging_id = self._get_model_staging_id(ref_node)
+                    staging_path = el_layer.get_staging_path(model_staging_id)
+                    if not el_layer.staging_exists(model_staging_id):
+                        self._log(
+                            f"  Warning: No staging data for ref model "
+                            f"{ref_node.name} (run the upstream model first)"
+                        )
+                        continue
+
+                    staging_path_obj = Path(str(staging_path))
+                    try:
+                        if (
+                            staging_path_obj.is_dir()
+                            and (staging_path_obj / "_delta_log").is_dir()
+                        ):
+                            df = spark.read.format("delta").load(str(staging_path))
+                        else:
+                            df = spark.read.parquet(str(staging_path))
+                    except Exception as e:
+                        self._log(
+                            f"  Warning: Could not read staging for ref "
+                            f"{ref_node.name}: {e}"
+                        )
+                        continue
+
+                    view_name = f"{view_prefix}{ref_node.name}"
+                    df.createOrReplaceTempView(view_name)
+                    self._log(f"  Registered temp view: {view_name} (ref model)")
 
         return view_mappings
 
@@ -931,6 +1130,18 @@ class FederationEngine:
         """
         sqlglot_dialect = get_dialect_for_adapter(source_dialect)
 
+        # Databricks/Spark dialects treat double-quoted strings as STRING
+        # literals, not identifiers.  But DVT's compiled SQL always uses
+        # double-quoted identifiers (ANSI/Postgres style) because column
+        # names with spaces originate from source tables defined in SQL
+        # files (e.g., c."Customer Code").  Parsing with the Databricks
+        # dialect misinterprets these as string literals, producing
+        # c.'Customer Code' instead of c.`Customer Code` in the output.
+        # Fix: parse with 'postgres' dialect which treats double quotes
+        # as identifiers, then transpile to Spark.
+        if sqlglot_dialect in ("databricks", "spark"):
+            sqlglot_dialect = "postgres"
+
         try:
             parsed = sqlglot.parse_one(compiled_sql, read=sqlglot_dialect)
         except ParseError as e:
@@ -970,6 +1181,109 @@ class FederationEngine:
                 table.set("this", exp.Identifier(this=view_name))
                 table.set("db", None)  # Remove schema prefix
                 table.set("catalog", None)  # Remove catalog
+
+        # Fix nested WITH clauses and duplicate CTE names.
+        #
+        # When dbt inlines ephemeral models, they may contain their own CTEs
+        # (WITH source AS (...), renamed AS (...)). Postgres allows nested
+        # WITH clauses and later CTEs to shadow earlier ones. Spark SQL
+        # rejects both — no nested WITH and no duplicate CTE names.
+        #
+        # Strategy:
+        # 1. Flatten: extract inner WITH clauses from CTEs, placing the inner
+        #    CTEs before the parent CTE in the outer WITH.
+        # 2. Deduplicate: rename duplicate CTE aliases and rewrite references.
+        with_clause = parsed.find(exp.With)
+        if with_clause:
+            # Step 1: Flatten nested WITH clauses.
+            # A CTE body may itself contain a WITH clause (e.g., ephemeral
+            # models). Spark can't handle nested WITHs, so we extract the
+            # inner CTEs and place them before the parent CTE.
+            changed = True
+            while changed:
+                changed = False
+                direct_ctes = list(with_clause.expressions)
+                new_expressions = []
+                for cte in direct_ctes:
+                    if not isinstance(cte, exp.CTE):
+                        new_expressions.append(cte)
+                        continue
+                    # Check if this CTE's body contains a nested WITH
+                    cte_body = cte.this  # The SELECT inside the CTE
+                    inner_with = cte_body.find(exp.With) if cte_body else None
+                    if inner_with and inner_with is not with_clause:
+                        # Extract inner CTEs before this CTE
+                        for inner_cte in list(inner_with.expressions):
+                            if isinstance(inner_cte, exp.CTE):
+                                new_expressions.append(inner_cte)
+                        # Remove the inner WITH from the CTE body,
+                        # keeping only the final SELECT
+                        inner_with.pop()
+                        changed = True
+                    new_expressions.append(cte)
+                with_clause.set("expressions", new_expressions)
+
+            # Step 2: Deduplicate CTE names (only direct children).
+            direct_ctes = [c for c in with_clause.expressions if isinstance(c, exp.CTE)]
+            seen_names: dict = {}  # name -> count
+            rename_map: dict = {}  # cte_id -> (old_name, new_name)
+
+            for cte in direct_ctes:
+                alias_node = cte.args.get("alias")
+                if not alias_node:
+                    continue
+                cte_name = (
+                    alias_node.this
+                    if isinstance(alias_node.this, str)
+                    else alias_node.name
+                )
+                if not cte_name:
+                    continue
+
+                if cte_name in seen_names:
+                    seen_names[cte_name] += 1
+                    new_name = f"{cte_name}__dvt_{seen_names[cte_name]}"
+                    rename_map[id(cte)] = (cte_name, new_name)
+                    alias_node.set("this", exp.Identifier(this=new_name))
+                else:
+                    seen_names[cte_name] = 1
+
+            # Step 3: Rewrite references to renamed CTEs.
+            if rename_map:
+                renamed_positions = {}
+                for i, cte in enumerate(direct_ctes):
+                    if id(cte) in rename_map:
+                        renamed_positions[i] = rename_map[id(cte)]
+
+                for pos, (old_name, new_name) in renamed_positions.items():
+                    # Rewrite in CTEs that come AFTER the renamed one
+                    for later_cte in direct_ctes[pos + 1 :]:
+                        for table in later_cte.find_all(exp.Table):
+                            if (
+                                table.name == old_name
+                                and not table.db
+                                and not table.catalog
+                            ):
+                                table.set("this", exp.Identifier(this=new_name))
+
+                    # Rewrite in the main SELECT body (outside CTEs)
+                    parent_select = with_clause.parent
+                    if parent_select:
+                        for table in parent_select.find_all(exp.Table):
+                            in_cte = False
+                            node = table.parent
+                            while node is not None:
+                                if isinstance(node, exp.CTE):
+                                    in_cte = True
+                                    break
+                                node = getattr(node, "parent", None)
+                            if (
+                                not in_cte
+                                and table.name == old_name
+                                and not table.db
+                                and not table.catalog
+                            ):
+                                table.set("this", exp.Identifier(this=new_name))
 
         # Fix SQLGlot Snowflake→Spark transpilation bug:
         # SQLGlot converts NOT IN (subquery) to <> ALL (subquery) when parsing
@@ -1154,7 +1468,16 @@ class FederationEngine:
 
         adapter_type = target_config.get("type", "")
 
-        # Get adapter for DDL operations
+        # Get adapter for DDL operations.
+        # For session-limited adapters (Oracle, MSSQL), evict the cached
+        # adapter to avoid thread-affinity issues: dbt's ConnectionManager
+        # tracks connections per thread ID, and the cached adapter may hold
+        # connections from a different thread (e.g., from extraction).
+        if adapter_type in ("oracle", "sqlserver"):
+            AdapterManager.evict(
+                self._get_profile_name(),
+                resolution.target,
+            )
         adapter = AdapterManager.get_adapter(
             profile_name=self._get_profile_name(),
             target_name=resolution.target,

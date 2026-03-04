@@ -488,6 +488,11 @@ def _compute_profile_template(profile_name: str) -> str:
       jdbc_load:
         num_partitions: 4
         batch_size: 10000
+
+      # Federation concurrency: max models running through Spark simultaneously.
+      # Limits JVM memory pressure — increase only if spark.driver.memory is large.
+      # Default: 1 (sequential federation, safest for single-JVM Spark).
+      max_federation_threads: 1
 """
 
 

@@ -155,6 +155,21 @@ class AdapterManager:
             return cls._adapters[key]
 
     @classmethod
+    def evict(cls, profile_name: str, target_name: str) -> None:
+        """Remove a cached adapter, forcing recreation on next get_adapter().
+
+        Used when an adapter's connections have gone stale (e.g., MSSQL/Oracle
+        connections timing out during long-running federation operations).
+
+        Args:
+            profile_name: Profile name
+            target_name: Target name
+        """
+        key = (profile_name, target_name)
+        with cls._lock:
+            cls._adapters.pop(key, None)
+
+    @classmethod
     def _create_adapter(
         cls,
         profile_name: str,

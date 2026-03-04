@@ -428,20 +428,13 @@ class FederationLoader:
 
             # Determine mode and DDL handling
             #
-            # For Databricks targets with special-character columns (spaces,
-            # hyphens, etc.): both the adapter DDL + JDBC append path AND the
-            # pure Spark JDBC path fail. The Databricks server rejects CREATE
-            # TABLE with special chars unless column mapping is enabled, and
-            # the JDBC driver can't INSERT into column-mapped tables. For this
-            # case, we dispatch to _load_via_adapter() which uses the adapter's
-            # SQL Connector for both DDL and data.
-            from dvt.utils.identifiers import needs_column_mapping
-
-            if (
-                adapter
-                and adapter_type in ("databricks", "spark")
-                and needs_column_mapping(df)
-            ):
+            # Databricks targets: always use adapter SQL Connector path.
+            # Spark's JDBC writer generates INSERT with double-quoted column
+            # names (e.g., "customer_code") but Databricks SQL uses backticks
+            # (`customer_code`). This causes syntax errors for ALL loads, not
+            # just those with special characters.  The adapter path uses the
+            # adapter's native SQL Connector which handles quoting correctly.
+            if adapter and adapter_type in ("databricks", "spark"):
                 return self._load_via_adapter(df, config, adapter)
 
             # Repartition for parallel writes (before acquiring semaphore
@@ -768,6 +761,7 @@ class FederationLoader:
         df: Any,
         staging_table: str,
         config: LoadConfig,
+        adapter: Any = None,
     ) -> None:
         """Write DataFrame to a staging table in the target database via JDBC.
 
@@ -775,15 +769,38 @@ class FederationLoader:
         can reference. Both the target table and staging table must be in
         the same database for the MERGE SQL to work natively.
 
+        For Databricks/Spark targets, uses the adapter SQL Connector instead
+        of Spark JDBC to avoid double-quoted column names in INSERT statements.
+
         Args:
             df: PySpark DataFrame to write
             staging_table: Fully qualified staging table name
             config: Load configuration (for connection + JDBC settings)
+            adapter: Optional dbt adapter (required for Databricks path)
         """
         from dvt.federation.auth import get_auth_handler
         from dvt.federation.spark_manager import SparkManager
 
         adapter_type = config.connection_config.get("type", "")
+
+        # Databricks/Spark: use adapter SQL Connector to avoid Spark JDBC's
+        # double-quoted column names which Databricks rejects.
+        if adapter and adapter_type in ("databricks", "spark"):
+            staging_config = LoadConfig(
+                table_name=staging_table,
+                mode="overwrite",
+                truncate=False,
+                full_refresh=True,  # Always DROP+CREATE staging tables
+                connection_config=config.connection_config,
+                jdbc_config=config.jdbc_config,
+            )
+            result = self._load_via_adapter(df, staging_config, adapter)
+            if not result.success:
+                raise RuntimeError(
+                    f"Failed to write staging table via adapter: {result.error}"
+                )
+            return
+
         spark_manager = SparkManager.get_instance()
         jdbc_url = spark_manager.get_jdbc_url(config.connection_config)
         jdbc_driver = spark_manager.get_jdbc_driver(adapter_type)
@@ -808,6 +825,17 @@ class FederationLoader:
 
         if num_partitions > 1:
             df = df.repartition(num_partitions)
+
+        # Snowflake case-folding fix: Spark JDBC creates staging table columns
+        # with double-quoted lowercase names (e.g., "customer_code"), making
+        # them case-sensitive in Snowflake.  But our MERGE/DELETE+INSERT SQL
+        # uses unquoted column names which Snowflake uppercases to
+        # CUSTOMER_CODE.  This mismatch causes "SQL compilation error".
+        # Fix: uppercase all DataFrame column names for Snowflake before
+        # writing the staging table, so they match unquoted SQL references.
+        if adapter_type == "snowflake":
+            for col_name in df.columns:
+                df = df.withColumnRenamed(col_name, col_name.upper())
 
         self._log(f"Writing to staging table {staging_table}...")
         df.write.jdbc(
@@ -868,7 +896,7 @@ class FederationLoader:
             adapter_type = config.connection_config.get("type", "")
 
             # 2. Write to staging table
-            self._write_to_staging_table(df, staging_table, config)
+            self._write_to_staging_table(df, staging_table, config, adapter=adapter)
 
             # 3. Execute MERGE SQL (with unique index creation in same transaction for PG)
             columns = [f.name for f in df.schema.fields]
@@ -1062,7 +1090,7 @@ class FederationLoader:
             self._create_table_with_adapter(adapter, df, config)
 
             # 2. Write to staging table
-            self._write_to_staging_table(df, staging_table, config)
+            self._write_to_staging_table(df, staging_table, config, adapter=adapter)
 
             # 3. Execute DELETE + INSERT
             adapter_type = config.connection_config.get("type", "")
