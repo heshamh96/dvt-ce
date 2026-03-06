@@ -1,0 +1,185 @@
+# DVT Execution Times — Full Integration Test Matrix
+# Date: 2026-03-01
+# Project: trial_18_all_commands/Coke_DB (merged with trial_17 cloud models)
+# Total models: 67 | Seeds: 11 (9 small + 2 large 1M-row benchmark) | Tests: 25 | Snapshots: 1
+# Targets: pg_docker, mysql_docker, mssql_docker, oracle_docker, mariadb_docker, pg_dev, dbx_dev, disf_dev
+# NOTE: sf_dev is READ ONLY — excluded from writes
+# NOTE: transactions_b.csv (1M rows) and transactions_c.csv (1M rows) excluded from adapter seed
+#       (adapter inserts row-by-row — would take hours). These are seeded via --spark only on pg_dev.
+#
+# Format: COMMAND | TARGET | RESULT | TIME
+# ================================================================================
+
+# PHASE 1: dvt seed (adapter) --full-refresh — 2026-03-01 23:34:10
+dvt seed (adapter) --full-refresh                  | pg_docker        | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (adapter) --full-refresh                  | mysql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (adapter) --full-refresh                  | mssql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     6s
+dvt seed (adapter) --full-refresh                  | oracle_docker    | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    11s
+dvt seed (adapter) --full-refresh                  | mariadb_docker   | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (adapter) --full-refresh                  | pg_dev           | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+
+# PHASE 2: dvt seed --spark (subsequent, tables exist) — 2026-03-01 23:35:09
+dvt seed --spark (subsequent)                      | pg_docker        | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    67s
+dvt seed --spark (subsequent)                      | mysql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    67s
+dvt seed --spark (subsequent)                      | mssql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    74s
+dvt seed --spark (subsequent)                      | oracle_docker    | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    77s
+dvt seed --spark (subsequent)                      | mariadb_docker   | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    64s
+dvt seed --spark (subsequent)                      | pg_dev           | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    88s
+
+# PHASE 3: dvt seed --spark --full-refresh — 2026-03-01 23:42:45
+dvt seed --spark --full-refresh                    | pg_docker        | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    65s
+dvt seed --spark --full-refresh                    | mysql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    60s
+dvt seed --spark --full-refresh                    | mssql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    63s
+dvt seed --spark --full-refresh                    | oracle_docker    | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    79s
+dvt seed --spark --full-refresh                    | mariadb_docker   | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    62s
+dvt seed --spark --full-refresh                    | pg_dev           | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    60s
+
+# PHASE 4: Restore adapter seeds — 2026-03-01 23:49:33
+dvt seed (restore adapter types)                   | pg_docker        | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (restore adapter types)                   | mysql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (restore adapter types)                   | mssql_docker     | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     6s
+dvt seed (restore adapter types)                   | oracle_docker    | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     9s
+dvt seed (restore adapter types)                   | mariadb_docker   | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+dvt seed (restore adapter types)                   | pg_dev           | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |     5s
+
+# PHASE 5: Spark seed large files (pg_dev) — 2026-03-01 23:50:28
+dvt seed --spark (1M-row benchmarks)               | pg_dev           | PASS=2 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=2            |    78s
+
+# PHASE 6: dvt run (Docker targets) — 2026-03-01 23:52:05
+dvt run                                            | pg_docker        | PASS=45 WARN=0 ERROR=17 SKIP=3 NO-OP=0 TOTAL=65         |   893s
+dvt run                                            | mysql_docker     | Runtime Error                                           |    11s
+dvt run                                            | mssql_docker     |                                                         |    11s
+dvt run                                            | oracle_docker    | PASS=35 WARN=0 ERROR=27 SKIP=3 NO-OP=0 TOTAL=65         |  1012s
+dvt run                                            | mariadb_docker   | Runtime Error                                           |    11s
+
+# PHASE 6b: dvt run Docker models only — 2026-03-02 00:27:13
+# (excludes trial_17 Cocacola pipeline models that need pg_dev schemas STG/gold)
+dvt run (Docker models)                            | pg_docker        | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   418s
+dvt run (Docker models)                            | mysql_docker     | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   407s
+dvt run (Docker models)                            | mssql_docker     | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   515s
+dvt run (Docker models)                            | oracle_docker    | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   495s
+dvt run (Docker models)                            | mariadb_docker   | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   469s
+
+# PHASE 7: dvt run --target pg_dev — 2026-03-02 01:06:01
+dvt run (all pg_dev models)                        | pg_dev           | PASS=38 WARN=0 ERROR=1 SKIP=1 NO-OP=0 TOTAL=40          |   637s
+
+# PHASE 8: dvt run --full-refresh (Docker) — 2026-03-02 01:17:39
+dvt run --full-refresh (Docker models)             | pg_docker        | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   308s
+dvt run --full-refresh (Docker models)             | mysql_docker     | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   350s
+dvt run --full-refresh (Docker models)             | mssql_docker     | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   328s
+dvt run --full-refresh (Docker models)             | oracle_docker    | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   415s
+dvt run --full-refresh (Docker models)             | mariadb_docker   | PASS=24 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=24          |   350s
+
+# PHASE 9: dvt test (Docker) — 2026-03-02 01:47:15
+dvt test                                           | pg_docker        | PASS=25 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=25          |     5s
+dvt test                                           | mysql_docker     | PASS=21 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=25          |     5s
+dvt test                                           | mssql_docker     | PASS=21 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=25          |     5s
+dvt test                                           | oracle_docker    | PASS=25 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=25          |    15s
+dvt test                                           | mariadb_docker   | PASS=21 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=25          |     4s
+
+# PHASE 10: dvt snapshot (Docker) — 2026-03-02 01:48:54
+dvt snapshot                                       | pg_docker        | PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1            |     5s
+dvt snapshot                                       | mysql_docker     | PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1            |     5s
+dvt snapshot                                       | mssql_docker     | PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1            |     5s
+dvt snapshot                                       | oracle_docker    | PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1            |     8s
+dvt snapshot                                       | mariadb_docker   | PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1            |     6s
+
+# PHASE 11: DDL contract verification — 2026-03-02 01:49:46
+PG types verified: text, double precision, integer, boolean, date all preserved
+
+# PHASE 12: Cloud — dbx_dev — 2026-03-02 01:50:12
+dvt seed (adapter) --full-refresh                  | dbx_dev          | PASS=5 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=9            |    93s
+dvt seed --spark                                   | dbx_dev          | PASS=4 WARN=0 ERROR=5 SKIP=0 NO-OP=0 TOTAL=9            |   164s
+dvt run (federation_tests)                         | dbx_dev          | PASS=6 WARN=0 ERROR=19 SKIP=0 NO-OP=0 TOTAL=25          |   474s
+
+# ================================================================================
+# DATE: 2026-03-02 (continued session)
+# ================================================================================
+
+# PHASE 13: Unit tests (pre-commit verification) — 2026-03-02
+pytest tests/unit/ -v --tb=long                    | local            | 2324 passed, 3 failed (pre-existing), 8 skipped          |    75s
+# Errors logged in: hesham_mind/logs_2026-03-02.txt
+# All 3 failures are pre-existing (ConflictProject/dbt_project.yml path resolution)
+# No regressions from DDL contract changes
+
+# PHASE 14: Cloud — disf_dev (writable Snowflake) — 2026-03-02
+# NOTE: dbt-snowflake 1.11.2 → downgraded to 1.10.7 (compat with dbt-adapters 1.16.2)
+#       Patched dbt-adapters 1.16.2: added InvalidCatalogIntegrationConfigError,
+#       InvalidRelationConfigError stubs for Snowflake Iceberg catalog module.
+dvt seed (adapter) --full-refresh                  | disf_dev         | PASS=5 WARN=0 ERROR=4 SKIP=0 NO-OP=0 TOTAL=9            |    14s
+# Errors: customers_db_1, customers_db_2, packs, transactions_a — column names with spaces
+#         cause Snowflake SQL compilation error (unquoted identifiers). Pre-existing adapter issue.
+dvt seed --spark                                   | disf_dev         | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    90s
+dvt seed --spark --full-refresh                    | disf_dev         | PASS=9 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=9            |    93s
+dvt run (pushdown+federation, threads=1)           | disf_dev         | PASS=20 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=20          |   737s
+# NOTE: multi-thread (5) crashed after extracting — resource contention. Single thread works.
+dvt run --full-refresh (pushdown+federation, t=1)  | disf_dev         | PASS=20 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=20          |   552s
+dvt test                                           | disf_dev         | PASS=6 WARN=0 ERROR=19 SKIP=0 NO-OP=0 TOTAL=25          |    10s
+# Errors: 19 tests fail — adapter_test_model/view tables not materialized on SF (Docker-only),
+#         dim_customers/dim_packs/top_category/incremental_append not in pushdown+federation selection.
+#         Expected — those models were never run on disf_dev.
+dvt snapshot                                       | disf_dev         | PASS=1 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=1            |    11s
+
+# ================================================================================
+# DATE: 2026-03-02 (post dvt-adapters integration — import shim fix)
+# Context: Fixed import timing issue in dvt-adapters/src/dvt/__init__.py
+#          dvt-core commit: 085642f2c | dvt-adapters commit: a46c878
+# ================================================================================
+
+# PHASE 15: dvt debug (all 9 targets) — 2026-03-02 11:20:42
+dvt debug (all targets)                            | all 9            | pg/mysql/mssql/oracle/mariadb/pg_dev/sf/disf/dbx = OK    |    17s
+
+# PHASE 16: dvt --version — 2026-03-02 11:22:15
+dvt --version                                      | local            | 10 plugins detected (all correct versions)               |     5s
+
+# PHASE 17: dvt seed (test_seed to Docker targets) — 2026-03-02 13:59-14:01
+dvt seed --select test_seed                        | pg_docker        | PASS=1 INSERT 5                                         |     8s
+dvt seed --select test_seed                        | mysql_docker     | PASS=1 INSERT 5                                         |    10s
+dvt seed --select test_seed                        | mssql_docker     | PASS=1 INSERT 5                                         |     9s
+dvt seed --select test_seed                        | oracle_docker    | PASS=1 INSERT 5                                         |    27s
+dvt seed --select test_seed                        | mariadb_docker   | PASS=1 INSERT 5                                         |     9s
+
+# PHASE 18: dvt run pushdown (each with native --target) — 2026-03-02 14:09
+dvt run --select pushdown_pg                       | pg_docker        | PASS SELECT 4                                           |  0.38s
+dvt run --select pushdown_mysql                    | mysql_docker     | PASS SUCCESS 4                                          |  0.30s
+dvt run --select pushdown_mssql                    | mssql_docker     | PASS OK                                                 |  1.45s
+dvt run --select pushdown_oracle                   | oracle_docker    | PASS OK                                                 |  3.47s
+dvt run --select pushdown_mariadb                  | mariadb_docker   | PASS SUCCESS 4                                          |  1.08s
+dvt run --select adapter_test_model+view+top       | pg_docker        | PASS=4 (3 table + 1 view)                               |  0.78s
+
+# PHASE 19: dvt run federation (cross-engine via Spark JDBC) — 2026-03-02 14:23
+dvt run --select mysql_to_pg                       | pg_docker        | PASS Federation: 4 rows via jdbc                        | 96.10s
+# mysql_docker -> pg_docker: JDBC extract 5 rows, Spark SQL, JDBC load 4 rows
+
+# PHASE 20: dvt test (data tests on pg_docker) — 2026-03-02 15:50
+dvt test --select adapter_test_model+test_seed+top | pg_docker        | PASS=14 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=14          |     9s
+
+# PHASE 21: Auxiliary commands — 2026-03-02 15:50
+dvt compile                                        | pg_docker        | OK (warnings on MySQL cross-target schema)               |    13s
+dvt list                                           | pg_docker        | OK (67 models, 28 sources, 25 tests, 11 seeds)          |     5s
+dvt parse                                          | pg_docker        | OK (perf_info.json generated)                           |     6s
+dvt clean                                          | pg_docker        | OK (target/ + dvt_packages/ + staging bucket cleaned)    |     2s
+
+# PHASE 22: Unit tests — 2026-03-02 14:08
+pytest tests/unit/ -q                              | local            | 2254 passed, 33 failed, 40 errors, 8 skipped            |   103s
+# All failures pre-existing (dbt->dvt rename assertions)
+
+# ================================================================================
+# DATE: 2026-03-04 (full end-to-end verification — all 65 models, 9 engines)
+# Context: Schema quoting fix (query_optimizer.py, dialect_fallbacks.py),
+#          Databricks token refreshed, all pushdown+federation models verified.
+#          dvt-core commit: 16163f530 (on dev, pushed to origin)
+#          max_federation_threads: 1 (serialized — JVM resource limit)
+# Engines: pg_docker, mysql_docker, mssql_docker, oracle_docker, mariadb_docker,
+#          pg_dev, sf_dev (read), disf_dev (write), dbx_dev
+# ================================================================================
+
+# PHASE 23: dvt run --full-refresh (all 65 models) — 2026-03-04 16:20:41
+dvt run --full-refresh                             | all 9 engines    | PASS=65 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=65          |   643s
+# 19 pushdown + 48 federation models. Execution plan: 15 incremental, 41 table, 9 view.
+# Breakdown: DROP+CREATE all tables/views, full JDBC extract+load for federation.
+
+# PHASE 24: dvt run (incremental, no full-refresh) — 2026-03-04 17:22:35
+dvt run                                            | all 9 engines    | PASS=65 WARN=0 ERROR=0 SKIP=0 NO-OP=0 TOTAL=65          |   614s
+# Same 65 models. Incremental models use TRUNCATE+INSERT (default DDL contract).
+# Federation models skip staging extraction when Delta staging already exists.

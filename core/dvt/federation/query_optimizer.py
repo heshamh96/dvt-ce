@@ -492,9 +492,13 @@ class QueryOptimizer:
         else:
             select = sqlglot.select("*")
 
-        # Build FROM clause
-        full_table = f"{schema}.{table}"
-        select = select.from_(full_table)
+        # Build FROM clause — use quoted identifiers so case-sensitive
+        # schema names (e.g., "STG" in Postgres) are preserved.
+        table_expr = exp.Table(
+            this=exp.Identifier(this=table, quoted=True),
+            db=exp.Identifier(this=schema, quoted=True) if schema else None,
+        )
+        select = select.from_(table_expr)
 
         # Add TABLESAMPLE if supported and requested
         if operations.sample_percent and supports_sample(dialect):

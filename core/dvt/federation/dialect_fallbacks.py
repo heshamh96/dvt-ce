@@ -294,6 +294,25 @@ IDENTIFIER_QUOTE: Dict[str, str] = {
 
 
 # =============================================================================
+# Identifier quoting helpers
+# =============================================================================
+
+
+def _quote_ident(dialect: str) -> str:
+    """Return the quote character for identifiers in the given dialect.
+
+    MySQL/MariaDB use backticks, SQL Server uses brackets (handled
+    separately), and everything else uses double-quotes (ANSI standard).
+    """
+    dialect = dialect.lower()
+    if dialect in ("mysql", "mariadb", "tidb", "singlestore", "databricks", "spark"):
+        return "`"
+    # SQL Server family uses [...] but double-quotes also work with
+    # QUOTED_IDENTIFIER ON (the default), so use double-quotes for simplicity.
+    return '"'
+
+
+# =============================================================================
 # Public Functions
 # =============================================================================
 
@@ -478,7 +497,9 @@ def build_extraction_query_fallback(
         parts.append(f"SELECT {col_str}")
 
     # FROM clause with optional TABLESAMPLE
-    from_clause = f"FROM {schema}.{table}"
+    # Quote identifiers to preserve case (e.g., "STG" schema in Postgres)
+    q = _quote_ident(dialect)
+    from_clause = f"FROM {q}{schema}{q}.{q}{table}{q}"
 
     if sample_percent is not None:
         sample_clause = get_sample_clause(dialect, sample_percent)
