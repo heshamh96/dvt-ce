@@ -21,8 +21,11 @@ Master orchestrator for all DVT testing. Routes to the correct test workflow bas
 /testing-factory integration           # Run integration tests against local PG
 /testing-factory cli                   # Run ALL CLI command tests
 /testing-factory cli debug             # Run CLI tests for a specific command
-/testing-factory adapters              # Run adapter compatibility tests against all containerized DBs
-/testing-factory adapters postgres     # Run adapter tests for a specific DB engine
+/testing-factory adapters              # Run adapter tests against all 8 engines + federation
+/testing-factory adapters postgres     # Run adapter tests for a specific engine
+/testing-factory adapters docker       # Run adapter tests for 5 Docker engines only
+/testing-factory adapters external     # Run adapter tests for 3 external engines only
+/testing-factory adapters federation   # Run cross-engine federation tests only
 /testing-factory uat                   # Run full UAT E2E (delegates to /uat-e2e skill)
 /testing-factory uat trial_18          # Run UAT on a specific trial
 /testing-factory os                    # Run cross-OS tests against all distros
@@ -35,8 +38,8 @@ Master orchestrator for all DVT testing. Routes to the correct test workflow bas
 ```
 Testing_Factory/                                          # /Users/hex/Documents/My_Projects/DVT/Testing_Factory/
 ├── Testing_Playground/                                   # Type 5: UAT E2E trials
-│   ├── trial_17_sync_uat/                                #   Latest trial with Coke_DB project
-│   ├── trial_16_full_cli_e2e/                            #   Previous full E2E
+│   ├── trial_18_all_commands/                             #   Latest trial (all 8 engines, 67 models)
+│   ├── trial_17_sync_uat/                                #   Previous sync UAT
 │   └── ...                                               #   20 historical trials
 ├── Testing_DVT_cli_commands/                             # Type 3: CLI command tests
 │   ├── conftest.py                                       #   Shared pytest fixtures
@@ -126,41 +129,62 @@ Run after CLI changes, flag additions, or command wiring changes.
 ### Type 4: Adapter Compatibility Tests (`/testing-factory adapters [db]`)
 
 **Location**: `Testing_Factory/Testing_adapters_docker/`
-**Runner**: `bash run_adapter_tests.sh [db]` or `bash run_adapter_tests.sh federation`
-**Requires**: Docker
+**Runner**: `bash run_adapter_tests.sh [engine|docker|external|federation|all]`
+**Requires**: Docker (for Docker engines), network access (for cloud engines)
 
-Tests DVT against containerized database engines to verify adapter compatibility AND cross-engine federation. Each engine runs in its own Docker container on a shared `db_network`.
+Tests DVT against 8 database engines (5 Docker + 3 external) to verify adapter compatibility AND cross-engine federation.
 
-**Databases** (5 engines + 1 management UI, each in a separate container):
-| Engine | Service Name | Container Name | Port | Adapter Package |
-|--------|-------------|----------------|------|----------------|
-| PostgreSQL 16 | postgres | db_postgres | 5432 | dbt-postgres |
-| MySQL 8.0 | mysql | db_mysql | 3306 | dbt-mysql (community) |
-| SQL Server 2022 | sqlserver | db_sqlserver | 1433 | dbt-sqlserver |
-| Oracle XE 21c | oracle | db_oracle | 1521 | dbt-oracle (future) |
-| MariaDB 11 | mariadb | db_mariadb | 3307 | dbt-mysql (community) |
-| Adminer UI | adminer | db_adminer | 8080 | (management) |
+**Docker Engines** (5, managed by docker-compose):
+| Engine | Service | Target | Port | Adapter |
+|--------|---------|--------|------|---------|
+| PostgreSQL 16 | postgres | pg_docker | 5432 | dbt-postgres |
+| MySQL 8.0 | mysql | mysql_docker | 3306 | dbt-mysql |
+| SQL Server 2022 | sqlserver | mssql_docker | 1433 | dbt-sqlserver |
+| Oracle XE 21c | oracle | oracle_docker | 1521 | dbt-oracle |
+| MariaDB 11 | mariadb | mariadb_docker | 3307 | dbt-mysql |
+
+**External Engines** (3, already running outside Docker):
+| Engine | Target | Type | Notes |
+|--------|--------|------|-------|
+| PostgreSQL (Homebrew) | pg_dev | Local | Port 5433, Homebrew-managed |
+| Snowflake | disf_dev (write) / sf_dev (read) | Cloud | sf_dev is READ ONLY |
+| Databricks | dbx_dev | Cloud | SQL warehouse |
 
 **Phase A — Single-Engine Pushdown** (per engine):
-1. `docker compose up -d <engine>` — start container
-2. `dvt debug` — verify connection
-3. `dvt seed` — load test data
-4. `dvt run` — execute pushdown models (SQL on target DB)
-5. Query DB to verify row counts and data integrity
-6. `dvt run --full-refresh` — verify DDL contract (DROP+CREATE+INSERT)
+- Docker engines: start container, wait for health check, then test
+- External engines: skip Docker steps, just verify connectivity
+1. `dvt debug` — verify connection
+2. `dvt seed` — load test data
+3. `dvt run` — execute pushdown models (SQL on target DB)
+4. `dvt run --full-refresh` — verify DDL contract (DROP+CREATE+INSERT)
 
-**Phase B — Cross-Engine Federation** (DVT's key differentiator):
-All containers must be running. Federation models read from one engine and write to another via Spark JDBC.
+**Phase B — Cross-Engine Federation** (17 federation models):
+All Docker containers + external engines must be accessible. Federation models read from one engine and write to another via Spark JDBC.
 
-Test matrix:
-| Source Engine | Target Engine | Model | Validates |
-|--------------|--------------|-------|-----------|
-| PostgreSQL | MySQL | `pg_to_mysql` | JDBC extraction from PG, JDBC load to MySQL |
+Test matrix (Docker-to-Docker):
+| Source | Target | Model | Validates |
+|--------|--------|-------|-----------|
+| PostgreSQL | MySQL | `pg_to_mysql` | JDBC extraction from PG, load to MySQL |
 | PostgreSQL | SQL Server | `pg_to_mssql` | JDBC load to MSSQL, type mapping |
+| PostgreSQL | Oracle | `pg_to_oracle` | JDBC load to Oracle |
+| PostgreSQL | MariaDB | `pg_to_mariadb` | JDBC load to MariaDB |
 | MySQL | PostgreSQL | `mysql_to_pg` | JDBC extraction from MySQL |
 | SQL Server | PostgreSQL | `mssql_to_pg` | JDBC extraction from MSSQL |
-| PostgreSQL + MySQL | PostgreSQL | `cross_pg_mysql` | Multi-source federation, Spark SQL join |
+| Oracle | PostgreSQL | `oracle_to_pg` | JDBC extraction from Oracle |
 | MariaDB | PostgreSQL | `mariadb_to_pg` | MariaDB JDBC extraction |
+| PG + MySQL | PostgreSQL | `cross_pg_mysql` | Multi-source Spark SQL join |
+
+Test matrix (Cross-infrastructure):
+| Source | Target | Model | Validates |
+|--------|--------|-------|-----------|
+| PG Docker | Snowflake (disf_dev) | `pg_to_snowflake` | JDBC load to Snowflake |
+| PG Docker | Databricks | `pg_to_databricks` | JDBC load to Databricks |
+| Snowflake (sf_dev) | PG Docker | `snowflake_to_pg` | JDBC extraction from Snowflake |
+| Databricks | PG Docker | `databricks_to_pg` | JDBC extraction from Databricks |
+| PG Dev | PG Docker | `pg_dev_to_pg_docker` | Cross-instance PG federation |
+| PG Docker | PG Dev | `pg_docker_to_pg_dev` | Cross-instance PG federation |
+| MySQL | Snowflake (disf_dev) | `mysql_to_snowflake` | Docker-to-cloud federation |
+| MySQL | Databricks | `mysql_to_databricks` | Docker-to-cloud federation |
 
 Each federation test verifies:
 - Spark session initializes correctly

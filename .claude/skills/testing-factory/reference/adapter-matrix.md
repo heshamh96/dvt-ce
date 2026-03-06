@@ -12,7 +12,7 @@
 | Databricks | (cloud) | N/A | N/A | dbt-databricks | Supported | spark-databricks JDBC |
 | Snowflake | (cloud) | N/A | N/A | dbt-snowflake | Supported | snowflake-jdbc-3.19.0.jar |
 
-**Note**: Each database engine runs in its own Docker container on a shared `db_network`. The service names (postgres, mysql, etc.) are the hostnames when connecting from within the Docker network.
+**Note**: Docker engines run in containers on a shared `db_network`. External engines (pg_dev, Snowflake, Databricks) are already running and don't need Docker management.
 
 ## Container Credentials (from .env)
 
@@ -50,7 +50,7 @@
 | Pipe extraction (CLI) | psql | mysql | bcp | TBD | mysql | N/A | N/A |
 | Native Spark connector | N/A | N/A | N/A | N/A | N/A | YES | YES |
 
-*Cloud targets (Databricks, Snowflake) use JDBC for federation but are not in the Docker test set. They are tested via UAT E2E (Type 5).
+*Cloud targets (Databricks, Snowflake) use JDBC for federation. They are now tested directly in Type 4 adapter tests as external engines (disf_dev writable, sf_dev read-only, dbx_dev).
 
 ## profiles.yml Template for Containerized Engines
 
@@ -112,7 +112,7 @@ AdapterTest:
 
 ## Test Sequence Per Engine
 
-For each database engine, run:
+### Docker Engines (postgres, mysql, mssql, oracle, mariadb)
 
 ```bash
 # 1. Start container
@@ -121,22 +121,30 @@ docker compose up -d <engine>
 # 2. Wait for health check
 docker compose ps  # Should show "healthy"
 
-# 3. Verify connection
-dvt debug --profiles-dir test_project/Connections --project-dir test_project
+# 3-6. Standard test steps (see below)
+```
 
-# 4. Seed test data
+### External Engines (pg_dev, snowflake, databricks)
+
+```bash
+# No Docker steps — engine must already be running
+# Skip directly to standard test steps
+```
+
+### Standard Test Steps (all engines)
+
+```bash
+# 1. Verify connection
+dvt debug --target <target> --profiles-dir test_project/Connections --project-dir test_project
+
+# 2. Seed test data
 dvt seed --target <target> --profiles-dir test_project/Connections --project-dir test_project
 
-# 5. Run models
+# 3. Run models
 dvt run --target <target> --profiles-dir test_project/Connections --project-dir test_project
 
-# 6. Verify data (query via adapter or CLI tool)
-# e.g., psql, mysql, sqlcmd, etc.
-
-# 7. Full refresh
+# 4. Full refresh (DDL contract: DROP+CREATE+INSERT)
 dvt run --full-refresh --target <target> --profiles-dir test_project/Connections --project-dir test_project
-
-# 8. Verify DDL contract (tables were dropped and recreated)
 ```
 
 ## Cross-Engine Federation Test Models
@@ -145,22 +153,44 @@ These models test DVT's core differentiator: reading from one database engine an
 
 **Location**: `Testing_adapters_docker/test_project/models/federation/`
 
-| Model | Source Engine | Target Engine | What It Tests |
-|-------|-------------|--------------|---------------|
-| `pg_to_mysql.sql` | PostgreSQL | MySQL | PG JDBC extraction + MySQL JDBC load |
-| `pg_to_mssql.sql` | PostgreSQL | SQL Server | PG JDBC extraction + MSSQL JDBC load, type mapping |
-| `mysql_to_pg.sql` | MySQL | PostgreSQL | MySQL JDBC extraction + PG JDBC load |
-| `mssql_to_pg.sql` | SQL Server | PostgreSQL | MSSQL JDBC extraction + PG JDBC load |
-| `cross_pg_mysql.sql` | PG + MySQL | PostgreSQL | Multi-source join in Spark SQL, dual JDBC extraction |
-| `mariadb_to_pg.sql` | MariaDB | PostgreSQL | MariaDB JDBC extraction |
+**Docker-to-Docker** (9 models):
+| Model | Source | Target | What It Tests |
+|-------|--------|--------|---------------|
+| `pg_to_mysql.sql` | pg_docker | mysql_docker | PG JDBC extraction + MySQL JDBC load |
+| `pg_to_mssql.sql` | pg_docker | mssql_docker | PG JDBC extraction + MSSQL JDBC load |
+| `pg_to_oracle.sql` | pg_docker | oracle_docker | PG JDBC extraction + Oracle JDBC load |
+| `pg_to_mariadb.sql` | pg_docker | mariadb_docker | PG JDBC extraction + MariaDB JDBC load |
+| `mysql_to_pg.sql` | mysql_docker | pg_docker | MySQL JDBC extraction + PG JDBC load |
+| `mssql_to_pg.sql` | mssql_docker | pg_docker | MSSQL JDBC extraction + PG JDBC load |
+| `oracle_to_pg.sql` | oracle_docker | pg_docker | Oracle JDBC extraction + PG JDBC load |
+| `mariadb_to_pg.sql` | mariadb_docker | pg_docker | MariaDB JDBC extraction |
+| `cross_pg_mysql.sql` | pg_docker + mysql_docker | pg_docker | Multi-source Spark SQL join |
+
+**Cross-infrastructure** (8 models):
+| Model | Source | Target | What It Tests |
+|-------|--------|--------|---------------|
+| `pg_to_snowflake.sql` | pg_docker | disf_dev | Docker-to-cloud (Snowflake) |
+| `pg_to_databricks.sql` | pg_docker | dbx_dev | Docker-to-cloud (Databricks) |
+| `snowflake_to_pg.sql` | sf_dev (read) | pg_docker | Cloud-to-Docker (Snowflake) |
+| `databricks_to_pg.sql` | dbx_dev | pg_docker | Cloud-to-Docker (Databricks) |
+| `pg_dev_to_pg_docker.sql` | pg_dev | pg_docker | Cross-instance PG federation |
+| `pg_docker_to_pg_dev.sql` | pg_docker | pg_dev | Cross-instance PG federation |
+| `mysql_to_snowflake.sql` | mysql_docker | disf_dev | Docker-to-cloud (MySQL->SF) |
+| `mysql_to_databricks.sql` | mysql_docker | dbx_dev | Docker-to-cloud (MySQL->DBX) |
 
 ### Federation test data flow
 
 ```
 Source DB              Spark (local)           Target DB
-  [PG]  --JDBC--->  [Extract to staging]  --JDBC--->  [MySQL]
-  [MySQL] --JDBC--> [Extract to staging]  --JDBC--->  [PG]
+  [PG]  --JDBC--->  [Extract to staging]  --JDBC--->  [MySQL/MSSQL/Oracle/MariaDB/SF/DBX]
+  [MySQL] --JDBC--> [Extract to staging]  --JDBC--->  [PG/SF/DBX]
   [MSSQL] --JDBC--> [Extract to staging]  --JDBC--->  [PG]
+  [Oracle] --JDBC-> [Extract to staging]  --JDBC--->  [PG]
+  [MariaDB] ------> [Extract to staging]  --JDBC--->  [PG]
+  [SF] --JDBC-----> [Extract to staging]  --JDBC--->  [PG]
+  [DBX] --JDBC----> [Extract to staging]  --JDBC--->  [PG]
+  [pg_dev] -------> [Extract to staging]  --JDBC--->  [pg_docker]
+  [pg_docker] ----> [Extract to staging]  --JDBC--->  [pg_dev]
   [PG+MySQL] -----> [Join in Spark SQL]   --JDBC--->  [PG]
 ```
 
@@ -179,11 +209,19 @@ For each federation model:
 # Run only federation tests (starts all required containers)
 ./run_adapter_tests.sh federation
 
-# Run everything including federation
+# Run everything (8 engines + federation = full suite)
 ./run_adapter_tests.sh all
 
-# Run specific engine + federation
-./run_adapter_tests.sh postgres && ./run_adapter_tests.sh federation
+# Run only Docker engines
+./run_adapter_tests.sh docker
+
+# Run only external engines (pg_dev, snowflake, databricks)
+./run_adapter_tests.sh external
+
+# Run a specific engine
+./run_adapter_tests.sh postgres
+./run_adapter_tests.sh snowflake
+./run_adapter_tests.sh databricks
 ```
 
 ## System Dependencies Per Adapter
