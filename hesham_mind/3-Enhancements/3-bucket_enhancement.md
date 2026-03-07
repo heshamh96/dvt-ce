@@ -127,7 +127,7 @@ This document outlines the plan for enhancing DVT's bucket configuration and sta
 # Cloud storage dependencies (boto3, google-cloud-storage, azure-storage-blob)
 # are automatically installed by 'dvt sync' when cloud buckets are configured.
 #
-# See docs: https://github.com/heshamh96/dvt
+# See docs: https://github.com/heshamh96/dvt-core
 
 default:
   target: local

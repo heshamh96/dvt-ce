@@ -123,7 +123,7 @@ class LogDbtProfileError(ErrorLevel):
         msg += """
 For more information on configuring profiles, please consult the DVT docs:
 
-https://github.com/heshamh96/dvt#configuration-files
+https://github.com/heshamh96/dvt-core#configuration-files
 """
         return msg
 
@@ -228,7 +228,7 @@ Next steps:
   4. Run 'dvt debug' to verify all connections
   5. Run 'dvt run' to execute your models
 
-Documentation: https://github.com/heshamh96/dvt
+Documentation: https://github.com/heshamh96/dvt-core
 Need help? https://discord.gg/UjQcxJXAQp
 """
 

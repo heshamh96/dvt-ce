@@ -9,7 +9,7 @@
 | Decision | Choice |
 |----------|--------|
 | License | Apache 2.0 (open source, compliant with dbt-core upstream) |
-| GitHub repo | Public at github.com/heshamh96/dvt |
+| GitHub repo | Public at github.com/heshamh96/dvt-core |
 | Version | 1.12.104 |
 | PyPI package name | dvt-core |
 | Platform support | macOS + Linux (ARM + x86), no Windows |
@@ -96,7 +96,7 @@ deactivate && rm -rf /tmp/test-dvt
 - Remove `"Operating System :: Microsoft :: Windows"` classifier
 - Ensure `license = "Apache-2.0"`
 - Add NOTICE to `license-files`
-- Verify `project.urls` point to github.com/heshamh96/dvt
+- Verify `project.urls` point to github.com/heshamh96/dvt-core
 
 ### B4. Clean Up Old Branches
 - Delete local: `extraction_enhancement`, `prod`

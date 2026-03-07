@@ -9,10 +9,10 @@ license = "Apache-2.0"
 license-files = { globs = ["LICENSE", "NOTICE"] }
 keywords = []
 authors = [
-    { name = "DVT Team", email = "dev@dvt.io" },
+    { name = "Hesham Badawi" },
 ]
 maintainers = [
-    { name = "DVT Team", email = "dev@dvt.io" },
+    { name = "Meta Thinking Dev Team" },
 ]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -54,7 +54,7 @@ dependencies = [
     "dbt-semantic-interfaces>=0.9.0,<0.10",
     # Minor versions for these are expected to be backwards-compatible
     "dbt-common>=1.37.2,<2.0",
-    "dvt-adapters>=1.12.107,<2.0",
+    "dvt-adapters>=0.1.0,<2.0",
     "dbt-protos>=1.0.405,<2.0",
     # DVT-specific: pyspark is not a dependency; dvt sync installs it per project.
     "sqlglot>=20.0.0",
@@ -71,10 +71,10 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/heshamh96/dvt"
-Repository = "https://github.com/heshamh96/dvt.git"
-Issues = "https://github.com/heshamh96/dvt/issues"
-Changelog = "https://github.com/heshamh96/dvt/blob/dev/CHANGELOG.md"
+Homepage = "https://github.com/heshamh96/dvt-core"
+Repository = "https://github.com/heshamh96/dvt-core.git"
+Issues = "https://github.com/heshamh96/dvt-core/issues"
+Changelog = "https://github.com/heshamh96/dvt-core/blob/dev/CHANGELOG.md"
 
 [project.scripts]
 dvt = "dvt.cli.main:cli"

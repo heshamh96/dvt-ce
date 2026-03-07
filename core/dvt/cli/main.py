@@ -175,7 +175,7 @@ def global_flags(func):
 @p.show_resource_report
 def cli(ctx, **kwargs):
     """An ELT tool for managing your SQL transformations and data models.
-    For more documentation on these commands, visit: github.com/heshamh96/dvt
+    For more documentation on these commands, visit: github.com/heshamh96/dvt-core
     """
 
 

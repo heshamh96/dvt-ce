@@ -573,7 +573,7 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://github.com/heshamh96/dvt
+# Full documentation: https://github.com/heshamh96/dvt-core
 
 # In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
@@ -691,7 +691,7 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://github.com/heshamh96/dvt
+# Full documentation: https://github.com/heshamh96/dvt-core
 
 # In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
@@ -777,7 +777,7 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://github.com/heshamh96/dvt
+# Full documentation: https://github.com/heshamh96/dvt-core
 
 # In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model

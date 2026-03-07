@@ -5,7 +5,7 @@ This document provides an index of all **dev-team-*** and **test-team-*** sub-ag
 ## Overview
 
 All sub-agents follow these principles:
-- **Repository**: Work is done in the DVT repository (`git@github.com:heshamh96/dvt.git`)
+- **Repository**: Work is done in the DVT repository (`git@github.com:heshamh96/dvt-core.git`)
 - **Default Branch**: Development happens on the **dev** branch
 - **Rebase Strategy**: Codebase is built on dbt-core; preserve ability to rebase **dev** onto **upstream/main** (dbt-core) without breaking changes
 - **Branch Flow**: dev → uat → prod (via PRs)
