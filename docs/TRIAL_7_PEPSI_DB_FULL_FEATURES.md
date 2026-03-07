@@ -1,30 +1,30 @@
-# Trial 7: Pepsi_DB – Full feature test (sync working, minimal help, editable dvt-core)
+# Trial 7: Pepsi_DB – Full feature test (sync working, minimal help, editable dvt-ce)
 
 **Trial folder**: `Testing_Playground/trial_7_pepsi_db`  
 **Project name**: **Pepsi_DB**  
 **Critical rule**: **DO NOT OVERRIDE** `profiles.yml` or `computes.yml`. New profile **Pepsi_DB** must be **appended** (or merged); existing profiles and compute blocks must remain.
 
-This trial validates that **dvt sync** works correctly with: interactive mode, quoted `--python-env`, in-project env lookup first, and minimal `dvt sync --help`. Use **editable** dvt-core so the trial always uses the latest code.
+This trial validates that **dvt sync** works correctly with: interactive mode, quoted `--python-env`, in-project env lookup first, and minimal `dvt sync --help`. Use **editable** dvt-ce so the trial always uses the latest code.
 
 ---
 
 ## 1. Trial setup (Testing Playground)
 
 - **Path**: `Testing_Playground` (e.g. `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`).
-- **Trial folder**: `trial_7_pepsi_db` (uv project with **editable** dvt-core path dependency).
+- **Trial folder**: `trial_7_pepsi_db` (uv project with **editable** dvt-ce path dependency).
 - **Do not remove** existing trial folders. Do not overwrite `~/.dvt/profiles.yml` or `~/.dvt/computes.yml`; expect **append/merge** only.
 
-### Local dvt-core with uv (editable – recommended for Trial 7)
+### Local dvt-ce with uv (editable – recommended for Trial 7)
 
-Using **editable** mode ensures the trial always runs the latest dvt-core (sync fixes, minimal help, etc.) without running `uv sync` after every code change.
+Using **editable** mode ensures the trial always runs the latest dvt-ce (sync fixes, minimal help, etc.) without running `uv sync` after every code change.
 
 1. Create the trial folder: `Testing_Playground/trial_7_pepsi_db`.
 2. Copy the template:  
-   `cp /path/to/dvt-core/docs/trial_7_pyproject.toml Testing_Playground/trial_7_pepsi_db/pyproject.toml`
-3. Edit `pyproject.toml` and set the **absolute path** to `dvt-core/core` in `[tool.uv.sources].dvt-core`. Use **`editable = true`**:
+   `cp /path/to/dvt-ce/docs/trial_7_pyproject.toml Testing_Playground/trial_7_pepsi_db/pyproject.toml`
+3. Edit `pyproject.toml` and set the **absolute path** to `dvt-ce/core` in `[tool.uv.sources].dvt-ce`. Use **`editable = true`**:
    ```toml
    [tool.uv.sources]
-   dvt-core = { path = "/Users/hex/Documents/My_Projects/DVT/dvt-core/core", editable = true }
+   dvt-ce = { path = "/Users/hex/Documents/My_Projects/DVT/dvt-ce/core", editable = true }
    ```
 4. From the **trial root** (`trial_7_pepsi_db`): `uv sync`. Then run all commands from the trial root: `uv run dvt ...`.
 
@@ -42,7 +42,7 @@ Using **editable** mode ensures the trial always runs the latest dvt-core (sync 
 ### 3.1 One-time setup
 
 1. `cd` into `trial_7_pepsi_db`.
-2. Copy `docs/trial_7_pyproject.toml` to `pyproject.toml`, set the correct path to dvt-core, keep **editable = true**, then run `uv sync`.
+2. Copy `docs/trial_7_pyproject.toml` to `pyproject.toml`, set the correct path to dvt-ce, keep **editable = true**, then run `uv sync`.
 3. (Optional) Back up or note current `~/.dvt/profiles.yml` and `~/.dvt/computes.yml`.
 
 ### 3.2 Init (Pepsi_DB)

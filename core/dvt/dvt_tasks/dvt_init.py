@@ -41,7 +41,7 @@ IGNORE_FILES = ["__init__.py", "__pycache__"]
 
 DISCORD_URL = "https://discord.gg/UjQcxJXAQp"
 ADAPTERS_URL = "https://docs.getdbt.com/docs/available-adapters"
-DVT_REPO_URL = "https://github.com/heshamh96/dvt-core"
+DVT_REPO_URL = "https://github.com/heshamh96/dvt-ce"
 
 
 class DvtInitTask(BaseTask):

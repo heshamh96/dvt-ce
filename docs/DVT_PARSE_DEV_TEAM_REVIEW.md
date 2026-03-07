@@ -1,6 +1,6 @@
 # dvt parse – Dev team review (Feature 04)
 
-Review of the current `dvt parse` implementation against **dvt-core-features/04-dvt-parse** and the dev-team agents (backend, architecture, QA).
+Review of the current `dvt parse` implementation against **dvt-ce-features/04-dvt-parse** and the dev-team agents (backend, architecture, QA).
 
 ---
 
@@ -92,4 +92,4 @@ With project/profile flags:
 dvt parse --project-dir /path/to/project --profiles-dir ~/.dvt
 ```
 
-See **docs/USING_LOCAL_DVT_WITH_UV.md** for running with a local dvt-core build.
+See **docs/USING_LOCAL_DVT_WITH_UV.md** for running with a local dvt-ce build.

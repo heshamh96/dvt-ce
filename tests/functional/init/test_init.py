@@ -46,11 +46,18 @@ class TestInitProjectWithExistingProfilesYml:
                     type=click.INT,
                 ),
                 call.prompt(
-                    "host (hostname for the instance)", default=None, hide_input=False, type=None
+                    "host (hostname for the instance)",
+                    default=None,
+                    hide_input=False,
+                    type=None,
                 ),
                 call.prompt("port", default=5432, hide_input=False, type=click.INT),
-                call.prompt("user (dev username)", default=None, hide_input=False, type=None),
-                call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
+                call.prompt(
+                    "user (dev username)", default=None, hide_input=False, type=None
+                ),
+                call.prompt(
+                    "pass (dev password)", default=None, hide_input=True, type=None
+                ),
                 call.prompt(
                     "dbname (default database that dvt will build objects in)",
                     default=None,
@@ -63,7 +70,9 @@ class TestInitProjectWithExistingProfilesYml:
                     hide_input=False,
                     type=None,
                 ),
-                call.prompt("threads (1 or more)", default=1, hide_input=False, type=click.INT),
+                call.prompt(
+                    "threads (1 or more)", default=1, hide_input=False, type=click.INT
+                ),
             ]
         )
 
@@ -126,11 +135,18 @@ class TestInitProjectWithoutExistingProfilesYml:
                     type=click.INT,
                 ),
                 call.prompt(
-                    "host (hostname for the instance)", default=None, hide_input=False, type=None
+                    "host (hostname for the instance)",
+                    default=None,
+                    hide_input=False,
+                    type=None,
                 ),
                 call.prompt("port", default=5432, hide_input=False, type=click.INT),
-                call.prompt("user (dev username)", default=None, hide_input=False, type=None),
-                call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
+                call.prompt(
+                    "user (dev username)", default=None, hide_input=False, type=None
+                ),
+                call.prompt(
+                    "pass (dev password)", default=None, hide_input=True, type=None
+                ),
                 call.prompt(
                     "dbname (default database that dvt will build objects in)",
                     default=None,
@@ -143,7 +159,9 @@ class TestInitProjectWithoutExistingProfilesYml:
                     hide_input=False,
                     type=None,
                 ),
-                call.prompt("threads (1 or more)", default=1, hide_input=False, type=click.INT),
+                call.prompt(
+                    "threads (1 or more)", default=1, hide_input=False, type=click.INT
+                ),
             ]
         )
 
@@ -166,7 +184,9 @@ class TestInitProjectWithoutExistingProfilesYml:
             )
 
     @mock.patch.object(Path, "exists", autospec=True)
-    def test_init_task_in_project_without_profile_yml_specifying_profile_errors(self, exists):
+    def test_init_task_in_project_without_profile_yml_specifying_profile_errors(
+        self, exists
+    ):
         def exists_side_effect(path):
             # Override responses on specific files, default to 'real world' if not overriden
             return {"profiles.yml": False}.get(path.name, os.path.exists(path))
@@ -287,13 +307,21 @@ prompts:
         manager = Mock()
         manager.attach_mock(mock_prompt, "prompt")
         manager.attach_mock(mock_confirm, "confirm")
-        manager.prompt.side_effect = ["my_target", 5432, "test_username", "test_password"]
+        manager.prompt.side_effect = [
+            "my_target",
+            5432,
+            "test_username",
+            "test_password",
+        ]
         mock_get_adapter.return_value = [project.adapter.type()]
         run_dbt(["init"])
         manager.assert_has_calls(
             [
                 call.prompt(
-                    "target (The target name)", default=None, hide_input=False, type=click.STRING
+                    "target (The target name)",
+                    default=None,
+                    hide_input=False,
+                    type=click.STRING,
                 ),
                 call.prompt(
                     "port (The port (for integer test purposes))",
@@ -301,8 +329,12 @@ prompts:
                     hide_input=False,
                     type=click.INT,
                 ),
-                call.prompt("user (Your username)", default=None, hide_input=False, type=None),
-                call.prompt("pass (Your password)", default=None, hide_input=True, type=None),
+                call.prompt(
+                    "user (Your username)", default=None, hide_input=False, type=None
+                ),
+                call.prompt(
+                    "pass (Your password)", default=None, hide_input=True, type=None
+                ),
             ]
         )
 
@@ -365,11 +397,18 @@ class TestInitInvalidProfileTemplate:
                     type=click.INT,
                 ),
                 call.prompt(
-                    "host (hostname for the instance)", default=None, hide_input=False, type=None
+                    "host (hostname for the instance)",
+                    default=None,
+                    hide_input=False,
+                    type=None,
                 ),
                 call.prompt("port", default=5432, hide_input=False, type=click.INT),
-                call.prompt("user (dev username)", default=None, hide_input=False, type=None),
-                call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
+                call.prompt(
+                    "user (dev username)", default=None, hide_input=False, type=None
+                ),
+                call.prompt(
+                    "pass (dev password)", default=None, hide_input=True, type=None
+                ),
                 call.prompt(
                     "dbname (default database that dvt will build objects in)",
                     default=None,
@@ -382,7 +421,9 @@ class TestInitInvalidProfileTemplate:
                     hide_input=False,
                     type=None,
                 ),
-                call.prompt("threads (1 or more)", default=1, hide_input=False, type=click.INT),
+                call.prompt(
+                    "threads (1 or more)", default=1, hide_input=False, type=click.INT
+                ),
             ]
         )
 
@@ -457,7 +498,13 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
     @mock.patch("click.confirm")
     @mock.patch("click.prompt")
     def test_init_task_outside_of_project(
-        self, mock_prompt, mock_confirm, mock_get_adapter, project, project_name, unique_schema
+        self,
+        mock_prompt,
+        mock_confirm,
+        mock_get_adapter,
+        project,
+        project_name,
+        unique_schema,
     ):
         manager = Mock()
         manager.attach_mock(mock_prompt, "prompt")
@@ -478,17 +525,26 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
 
         manager.assert_has_calls(
             [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
                 call.prompt(
                     "Which database would you like to use?\n[1] postgres\n\n(Don't see the one you want? https://docs.getdbt.com/docs/available-adapters)\n\nEnter a number",
                     type=click.INT,
                 ),
                 call.prompt(
-                    "host (hostname for the instance)", default=None, hide_input=False, type=None
+                    "host (hostname for the instance)",
+                    default=None,
+                    hide_input=False,
+                    type=None,
                 ),
                 call.prompt("port", default=5432, hide_input=False, type=click.INT),
-                call.prompt("user (dev username)", default=None, hide_input=False, type=None),
-                call.prompt("pass (dev password)", default=None, hide_input=True, type=None),
+                call.prompt(
+                    "user (dev username)", default=None, hide_input=False, type=None
+                ),
+                call.prompt(
+                    "pass (dev password)", default=None, hide_input=True, type=None
+                ),
                 call.prompt(
                     "dbname (default database that dvt will build objects in)",
                     default=None,
@@ -501,7 +557,9 @@ class TestInitOutsideOfProject(TestInitOutsideOfProjectBase):
                     hide_input=False,
                     type=None,
                 ),
-                call.prompt("threads (1 or more)", default=1, hide_input=False, type=click.INT),
+                call.prompt(
+                    "threads (1 or more)", default=1, hide_input=False, type=click.INT
+                ),
             ]
         )
 
@@ -544,7 +602,9 @@ test:
 """
             )
 
-        with open(os.path.join(project.project_root, project_name, "dbt_project.yml"), "r") as f:
+        with open(
+            os.path.join(project.project_root, project_name, "dbt_project.yml"), "r"
+        ) as f:
             assert (
                 f.read()
                 == f"""
@@ -573,7 +633,7 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://github.com/heshamh96/dvt-core
+# Full documentation: https://github.com/heshamh96/dvt-ce
 
 # In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
@@ -606,7 +666,9 @@ class TestInitInvalidProjectNameCLI(TestInitOutsideOfProjectBase):
         run_dbt(["init", invalid_name, "--skip-profile-setup"])
         manager.assert_has_calls(
             [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
             ]
         )
 
@@ -630,8 +692,12 @@ class TestInitInvalidProjectNamePrompt(TestInitOutsideOfProjectBase):
         run_dbt(["init", "--skip-profile-setup"])
         manager.assert_has_calls(
             [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
             ]
         )
 
@@ -662,7 +728,9 @@ class TestInitProvidedProjectNameAndSkipProfileSetup(TestInitOutsideOfProjectBas
         run_dbt(["init", project_name, "--skip-profile-setup"])
         assert len(manager.mock_calls) == 0
 
-        with open(os.path.join(project.project_root, project_name, "dbt_project.yml"), "r") as f:
+        with open(
+            os.path.join(project.project_root, project_name, "dbt_project.yml"), "r"
+        ) as f:
             assert (
                 f.read()
                 == f"""
@@ -691,7 +759,7 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://github.com/heshamh96/dvt-core
+# Full documentation: https://github.com/heshamh96/dvt-ce
 
 # In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
@@ -727,7 +795,13 @@ class TestInitOutsideOfProjectWithSpecifiedProfile(TestInitOutsideOfProjectBase)
     @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.prompt")
     def test_init_task_outside_of_project_with_specified_profile(
-        self, mock_prompt, mock_get_adapter, project, project_name, unique_schema, dbt_profile_data
+        self,
+        mock_prompt,
+        mock_get_adapter,
+        project,
+        project_name,
+        unique_schema,
+        dbt_profile_data,
     ):
         manager = Mock()
         manager.attach_mock(mock_prompt, "prompt")
@@ -739,7 +813,9 @@ class TestInitOutsideOfProjectWithSpecifiedProfile(TestInitOutsideOfProjectBase)
 
         manager.assert_has_calls(
             [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
             ]
         )
 
@@ -748,7 +824,9 @@ class TestInitOutsideOfProjectWithSpecifiedProfile(TestInitOutsideOfProjectBase)
         with open(os.path.join(project.profiles_dir, "profiles.yml"), "r") as f:
             assert f.read() == yaml.safe_dump(dbt_profile_data)
 
-        with open(os.path.join(project.project_root, project_name, "dbt_project.yml"), "r") as f:
+        with open(
+            os.path.join(project.project_root, project_name, "dbt_project.yml"), "r"
+        ) as f:
             assert (
                 f.read()
                 == f"""
@@ -777,7 +855,7 @@ clean-targets:         # directories to be removed by `dvt clean`
 
 
 # Configuring models
-# Full documentation: https://github.com/heshamh96/dvt-core
+# Full documentation: https://github.com/heshamh96/dvt-ce
 
 # In this example config, we tell dvt to build all models in the example/
 # directory as views. These settings can be overridden in the individual model
@@ -810,12 +888,16 @@ class TestInitOutsideOfProjectSpecifyingInvalidProfile(TestInitOutsideOfProjectB
 
         manager.assert_has_calls(
             [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
             ]
         )
 
 
-class TestInitOutsideOfProjectSpecifyingProfileNoProfilesYml(TestInitOutsideOfProjectBase):
+class TestInitOutsideOfProjectSpecifyingProfileNoProfilesYml(
+    TestInitOutsideOfProjectBase
+):
     @mock.patch("dvt.task.init._get_adapter_plugin_names")
     @mock.patch("click.prompt")
     def test_init_task_outside_project_specifying_profile_no_profiles_yml_errors(
@@ -842,6 +924,8 @@ class TestInitOutsideOfProjectSpecifyingProfileNoProfilesYml(TestInitOutsideOfPr
 
         manager.assert_has_calls(
             [
-                call.prompt("Enter a name for your project (letters, digits, underscore)"),
+                call.prompt(
+                    "Enter a name for your project (letters, digits, underscore)"
+                ),
             ]
         )

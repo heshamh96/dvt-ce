@@ -43,7 +43,7 @@ hatch build
 **Alternative with uv** (for running dvt locally):
 ```bash
 cd core && uv sync
-uv run --project /path/to/dvt-core/core dvt <command>
+uv run --project /path/to/dvt-ce/core dvt <command>
 ```
 
 ## Architecture

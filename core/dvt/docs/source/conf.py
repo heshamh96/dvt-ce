@@ -13,7 +13,7 @@ sys.path.insert(0, os.path.abspath("./_ext"))
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
-project = "dvt-core"
+project = "dvt-ce"
 copyright = "2022, dvt Labs"
 author = "dvt Labs"
 

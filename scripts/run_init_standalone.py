@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
 Fallback/debug only: run init-like file creation without the dvt CLI (no dvt imports).
-Canonical test flow: build and install dvt-core in dev mode with uv, then run the
+Canonical test flow: build and install dvt-ce in dev mode with uv, then run the
 installed `dvt` CLI (see .cursor/rules/test-team-*.mdc and docs/RUNNING_DVT.md).
 Usage: from Testing_Playground, run:
-  python /path/to/dvt-core/scripts/run_init_standalone.py Coke_DB
+  python /path/to/dvt-ce/scripts/run_init_standalone.py Coke_DB
 """
 import os
 import shutil

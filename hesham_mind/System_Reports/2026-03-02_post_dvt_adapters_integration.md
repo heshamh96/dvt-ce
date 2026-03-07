@@ -1,13 +1,13 @@
 # DVT System Report: Post dvt-adapters Integration
 # Date: 2026-03-02
 # Trial: trial_18_all_commands
-# Context: After fixing the import shim architecture (dvt-adapters + dvt-core namespace merge)
+# Context: After fixing the import shim architecture (dvt-adapters + dvt-ce namespace merge)
 
 ## Executive Summary
 
 The import timing blocker that prevented `dvt debug` from loading adapter plugins
 has been resolved. The fix was in `dvt-adapters/src/dvt/__init__.py` -- because
-dvt-adapters is first on `sys.path`, its `__init__.py` executes (not dvt-core's).
+dvt-adapters is first on `sys.path`, its `__init__.py` executes (not dvt-ce's).
 The bootstrap logic (shim registration + path extension) was moved there.
 
 **Result: ALL DVT commands are now functional with the new dvt-adapters architecture.**
@@ -25,7 +25,7 @@ Error importing adapter: No module named 'dvt.adapters.postgres'
 ### Root Cause
 Python's `extend_path` namespace packages only execute the FIRST `__init__.py`
 found on the path. dvt-adapters' `src/dvt/__init__.py` was first (only had
-`extend_path`). dvt-core's `core/dvt/__init__.py` (which imported `dvt.dbt_shim`
+`extend_path`). dvt-ce's `core/dvt/__init__.py` (which imported `dvt.dbt_shim`
 and called `_extend_path()`) was NEVER executed.
 
 ### Fix (1 file changed)
@@ -148,7 +148,7 @@ due to Spark initialization overhead.
 | dvt parse | OK (perf_info.json generated) | 6s |
 | dvt clean | OK (target/ and dvt_packages/ cleaned, staging bucket cleaned) | 2s |
 
-### 2.8 Unit Tests (dvt-core)
+### 2.8 Unit Tests (dvt-ce)
 
 | Metric | Count |
 |--------|-------|
@@ -173,7 +173,7 @@ Failure categories (all pre-existing, NOT caused by this change):
 ```
 import dvt
   -> dvt-adapters/src/dvt/__init__.py (FIRST on path, runs)
-     -> extend_path(__path__, 'dvt')   # merges dvt-adapters + dvt-core
+     -> extend_path(__path__, 'dvt')   # merges dvt-adapters + dvt-ce
      -> import dvt.dbt_shim            # registers shim finders
         -> _DbtShimFinder -> sys.meta_path[1]    (dbt.* -> dvt.*)
         -> _DvtAdaptersFallbackFinder -> sys.meta_path[-1]
@@ -183,14 +183,14 @@ import dvt
 ### Package Dependency
 
 ```
-dvt-core (pyproject.toml)
+dvt-ce (pyproject.toml)
   depends on: dvt-adapters>=1.22.6,<2.0
 
 dvt-adapters (pyproject.toml)
   depends on: dbt-common>=1.36,<2.0
 
 trial_18 (uv sources)
-  dvt-core = editable local path
+  dvt-ce = editable local path
   dvt-adapters = editable local path
 ```
 
@@ -198,7 +198,7 @@ trial_18 (uv sources)
 
 | Repo | Branch | Commit | Status |
 |------|--------|--------|--------|
-| dvt-core | dev | 085642f2c | Committed, not pushed |
+| dvt-ce | dev | 085642f2c | Committed, not pushed |
 | dvt-adapters | dev | a46c878 | Initial commit, not pushed |
 
 ---

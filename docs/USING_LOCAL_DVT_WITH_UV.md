@@ -1,8 +1,8 @@
-# Using local dvt-core in your project with uv
+# Using local dvt-ce in your project with uv
 
-Use your local dvt-core repo (with the latest fixes) in another project via `uv sync`, **without** an editable install.
+Use your local dvt-ce repo (with the latest fixes) in another project via `uv sync`, **without** an editable install.
 
-## 1. Build dvt-core (optional)
+## 1. Build dvt-ce (optional)
 
 From the repo root:
 
@@ -11,18 +11,18 @@ cd core
 uv build
 ```
 
-This produces `core/dist/dvt_core-<version>-py3-none-any.whl`. You can skip this step if you use the path-to-source method below; uv will build when you sync.
+This produces `core/dist/dvt_ce-<version>-py3-none-any.whl`. You can skip this step if you use the path-to-source method below; uv will build when you sync.
 
-## 2. Point your project at local dvt-core
+## 2. Point your project at local dvt-ce
 
 In your project’s `pyproject.toml` (e.g. Fanta_DB or any trial project):
 
-1. Add `dvt-core` as a dependency if it isn’t already:
+1. Add `dvt-ce` as a dependency if it isn’t already:
 
    ```toml
    [project]
    dependencies = [
-     "dvt-core",
+     "dvt-ce",
      # ... your other deps
    ]
    ```
@@ -31,10 +31,10 @@ In your project’s `pyproject.toml` (e.g. Fanta_DB or any trial project):
 
    ```toml
    [tool.uv.sources]
-   dvt-core = { path = "/full/path/to/dvt-core/core", editable = false }
+   dvt-ce = { path = "/full/path/to/dvt-ce/core", editable = false }
    ```
 
-   Use the **absolute path** to the `core` directory inside the dvt-core repo (e.g. `/Users/hex/Documents/My_Projects/DVT/dvt-core/core`). Always run **`uv run dvt ...`** from the project root (never bare `dvt`).
+   Use the **absolute path** to the `core` directory inside the dvt-ce repo (e.g. `/Users/hex/Documents/My_Projects/DVT/dvt-ce/core`). Always run **`uv run dvt ...`** from the project root (never bare `dvt`).
 
 ## 3. Sync in your project
 
@@ -44,7 +44,7 @@ From your project directory:
 uv sync
 ```
 
-uv will build and install dvt-core from that path (non-editable). Then:
+uv will build and install dvt-ce from that path (non-editable). Then:
 
 ```bash
 uv run dvt sync --help   # minimal options + --python-env
@@ -61,16 +61,16 @@ If you prefer to install from a wheel you already built:
    ```toml
    [project]
    dependencies = [
-     "dvt-core",
+     "dvt-ce",
      # ...
    ]
 
    [tool.uv.sources]
-   dvt-core = { path = "/full/path/to/dvt-core/core/dist/dvt_core-1.12.0a1-py3-none-any.whl" }
+   dvt-ce = { path = "/full/path/to/dvt-ce/core/dist/dvt_ce-1.12.0a1-py3-none-any.whl" }
    ```
 
    (Update the version in the filename to match `core/dist/` after each build.)
 
 3. Run `uv sync` in your project.
 
-After you bump the version in dvt-core, rebuild and update the path if you use the wheel file.
+After you bump the version in dvt-ce, rebuild and update the path if you use the wheel file.

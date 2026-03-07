@@ -1,7 +1,7 @@
 # DVT Architecture & Implementation Report
 
 **Generated:** 2026-02-14
-**Scope:** Full codebase analysis of dvt-core
+**Scope:** Full codebase analysis of dvt-ce
 
 ---
 
@@ -439,7 +439,7 @@ Any database with a JDBC driver works through GenericExtractor + GenericLoader.
 
 ### Build System
 - **Build tool:** Hatch (`hatchling` backend)
-- **Package name:** `dvt-core`
+- **Package name:** `dvt-ce`
 - **Python:** `>=3.10` (supports 3.10-3.13, CPython + PyPy)
 - **Entry point:** `dvt = "dvt.cli.main:cli"`
 

@@ -220,7 +220,7 @@ class _DvtAdaptersFallbackFinder(importlib.abc.MetaPathFinder):
     Third-party dbt adapter plugins (dbt-postgres, dbt-snowflake, etc.) install
     their code into ``site-packages/dbt/adapters/<plugin>/``.  The shim maps
     ``dbt.adapters.*`` → ``dvt.adapters.*``, but ``dvt.adapters.__path__`` only
-    covers dvt-adapters and dvt-core paths.
+    covers dvt-adapters and dvt-ce paths.
 
     This finder runs once: on the first miss for ``dvt.adapters.<X>``, it
     discovers all ``dbt/adapters/`` directories in ``sys.path`` / site-packages

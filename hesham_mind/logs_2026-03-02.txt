@@ -17,7 +17,7 @@
 # --- FAILURE 1: test_defaults ---
 # File: tests/unit/config/test_project.py:116
 # Test: TestProjectInitialization::test_defaults
-# Error: AssertionError: '/Users/hex/Documents/My_Projects/DVT/dvt-core/ConflictProject/logs' != 'logs'
+# Error: AssertionError: '/Users/hex/Documents/My_Projects/DVT/dvt-ce/ConflictProject/logs' != 'logs'
 # Cause: project.log_path resolves to absolute path because ConflictProject/dbt_project.yml
 #        exists in the repo root. The test expects relative "logs" but gets the full path
 #        from the ConflictProject directory.
@@ -26,7 +26,7 @@
 # --- FAILURE 2: test_from_args ---
 # File: tests/unit/config/test_runtime.py:138
 # Test: TestRuntimeConfigFiles::test_from_args
-# Error: AssertionError: '/Users/hex/Documents/My_Projects/DVT/dvt-core/ConflictProject/logs' != 'logs'
+# Error: AssertionError: '/Users/hex/Documents/My_Projects/DVT/dvt-ce/ConflictProject/logs' != 'logs'
 # Cause: Same as FAILURE 1 — config.log_path resolves to absolute path due to
 #        ConflictProject/dbt_project.yml in repo root.
 # Fix:   Same as FAILURE 1.
@@ -154,13 +154,13 @@
 # ================================================================================
 # POST dvt-adapters INTEGRATION — 2026-03-02 (continued)
 # Context: Fixed import timing issue, re-tested full stack
-# dvt-core commit: 085642f2c | dvt-adapters commit: a46c878
+# dvt-ce commit: 085642f2c | dvt-adapters commit: a46c878
 # ================================================================================
 
 # --- BLOCKER FIX: Import Timing ---
 # Problem: `dvt debug --target pg_docker` -> "No module named 'dvt.adapters.postgres'"
 # Root cause: dvt-adapters' dvt/__init__.py runs FIRST (first on sys.path).
-#   dvt-core's dvt/__init__.py (which imports dvt.dbt_shim) was NEVER executed.
+#   dvt-ce's dvt/__init__.py (which imports dvt.dbt_shim) was NEVER executed.
 #   Result: _DbtShimFinder not registered, dvt.adapters.__path__ not extended,
 #   third-party adapter plugins invisible.
 # Fix: Added shim bootstrap to dvt-adapters/src/dvt/__init__.py:

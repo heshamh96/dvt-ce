@@ -17,7 +17,7 @@ Hesham is building **DVT (Data Virtualization Tool)**, a fork of dbt-core with f
   - `dvt run --full-refresh`: **DROP + CREATE + INSERT** (rebuilds structure)
 - **NO column name sanitization** — use proper quoting for all dialects via adapters
 - **When a model targets a specific adapter (e.g., `config(target='dbx_dev')`), the SQL must be written in THAT adapter's dialect.** E.g., backticks for Databricks identifiers, not PG double-quotes. The compiler correctly transpiles between dialects.
-- E2E test project is at `Coke_DB` — run commands from that directory using `uv run --project /Users/hex/Documents/My_Projects/DVT/dvt-core/core dvt <command>`
+- E2E test project is at `Coke_DB` — run commands from that directory using `uv run --project /Users/hex/Documents/My_Projects/DVT/dvt-ce/core dvt <command>`
 - Do NOT pass `--target pg_dev` for `transactions_pg_to_dbx` (it targets dbx_dev via model config)
 - `delta-spark` should be added to the `dvt sync` logic, always coupled with pyspark — NOT as a separate optional dependency
 - `{{ this }}` in incremental federation models should **always resolve to the staging Delta table** — scalar subqueries get pre-resolved to literal values before extraction

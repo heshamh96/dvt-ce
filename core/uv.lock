@@ -393,7 +393,7 @@ wheels = [
 ]
 
 [[package]]
-name = "dvt-core"
+name = "dvt-ce"
 source = { editable = "." }
 dependencies = [
     { name = "agate" },

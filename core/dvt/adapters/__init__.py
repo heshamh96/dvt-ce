@@ -12,7 +12,7 @@ mysql, oracle, databricks, sqlserver, etc.), the fallback finder in
 by temporarily bypassing the shim.
 
 NOTE: With ``extend_path``, only the first ``__init__.py`` on the namespace path
-actually executes.  Since dvt-adapters is first, this file (from dvt-core) may
+actually executes.  Since dvt-adapters is first, this file (from dvt-ce) may
 NOT run.  All import-hook registration therefore lives in ``dvt.dbt_shim``
 which is imported early from ``dvt/__init__.py``.
 """

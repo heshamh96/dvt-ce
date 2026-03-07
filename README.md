@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/heshamh96/dvt-core/master/docs/images/dvt-logo.png" alt="DVT Logo" width="200"/>
+  <img src="https://raw.githubusercontent.com/heshamh96/dvt-ce/master/docs/images/dvt-logo.png" alt="DVT Logo" width="200"/>
 </p>
 
 <h1 align="center">DVT &mdash; Data Virtualization Tool</h1>
@@ -10,9 +10,9 @@
 </p>
 
 <p align="center">
-  <a href="https://pypi.org/project/dvt-core/"><img src="https://img.shields.io/pypi/v/dvt-core?color=blue&label=PyPI" alt="PyPI Version"/></a>
-  <a href="https://pypi.org/project/dvt-core/"><img src="https://img.shields.io/pypi/pyversions/dvt-core?label=Python" alt="Python Versions"/></a>
-  <a href="https://github.com/heshamh96/dvt-core/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"/></a>
+  <a href="https://pypi.org/project/dvt-ce/"><img src="https://img.shields.io/pypi/v/dvt-ce?color=blue&label=PyPI" alt="PyPI Version"/></a>
+  <a href="https://pypi.org/project/dvt-ce/"><img src="https://img.shields.io/pypi/pyversions/dvt-ce?label=Python" alt="Python Versions"/></a>
+  <a href="https://github.com/heshamh96/dvt-ce/blob/master/LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-green.svg" alt="License"/></a>
 </p>
 
 ---
@@ -143,8 +143,8 @@ DVT's architecture is adapter-agnostic -- any database with a dbt adapter and a 
 uv init my-dvt-project --python 3.12
 cd my-dvt-project
 
-# Add dvt-core
-uv add dvt-core
+# Add dvt-ce
+uv add dvt-ce
 ```
 
 > **Important:** If your system default Python is 3.14+, you **must** specify `--python 3.12` (or 3.10/3.11/3.13) when creating the project. Python 3.14 is pre-release and not supported by DVT's upstream dependencies.
@@ -156,7 +156,7 @@ uv add dvt-core
 python3.12 -m venv .venv
 source .venv/bin/activate
 
-pip install dvt-core
+pip install dvt-ce
 ```
 
 ### 2. Initialize Your Project
@@ -573,7 +573,7 @@ We're building DVT in the open and we'd love for you to be part of it.
 </p>
 
 - **Discord** -- Join the [DVT community server](https://discord.gg/UjQcxJXAQp) for discussions, support, and announcements.
-- **GitHub Issues** -- Found a bug or have a feature request? [Open an issue](https://github.com/heshamh96/dvt-core/issues).
+- **GitHub Issues** -- Found a bug or have a feature request? [Open an issue](https://github.com/heshamh96/dvt-ce/issues).
 - **Contributing** -- Want to help build DVT? Contributions are welcome. Start by opening an issue to discuss your idea.
 
 ---

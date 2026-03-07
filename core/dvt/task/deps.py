@@ -129,8 +129,8 @@ class DepsTask(BaseTask):
 
         The matching is flexible to handle both underscore and hyphen variants of package names,
         as git repos often use hyphens (dvt-utils) while package names use underscores (dbt_utils).
-        Word boundaries (/, .) are enforced to prevent false matches like "dvt-core" matching
-        "dvt-core-utils".
+        Word boundaries (/, .) are enforced to prevent false matches like "dvt-ce" matching
+        "dvt-ce-utils".
 
         Args:
             packages_yml (dict): In-memory read of `packages.yml` contents

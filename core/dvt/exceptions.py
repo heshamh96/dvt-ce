@@ -272,7 +272,7 @@ class OperationError(CompilationError):
         msg = (
             f"dvt encountered an error when attempting to create a {self.operation_name}. "
             "If this error persists, please create an issue at: \n\n"
-            "https://github.com/dvt-labs/dvt-core"
+            "https://github.com/dvt-labs/dvt-ce"
         )
 
         return msg
@@ -1053,7 +1053,7 @@ class PackageVersionNotFoundError(DependencyError):
         addendum = (
             (
                 "\n"
-                "  Not shown: package versions incompatible with installed version of dvt-core\n"
+                "  Not shown: package versions incompatible with installed version of dvt-ce\n"
                 "  To include them, run 'dvt --no-version-check deps'"
             )
             if self.should_version_check

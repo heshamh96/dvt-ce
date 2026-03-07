@@ -30,7 +30,7 @@ Summary of what the test team has verified: dvt init, dvt debug (Feature 02), an
 
 ### Spec alignment
 
-- Targets are shown for the **current project profile only** per updated Feature 02 spec (dvt-core-features/02-dvt-debug/FEATURE.md).
+- Targets are shown for the **current project profile only** per updated Feature 02 spec (dvt-ce-features/02-dvt-debug/FEATURE.md).
 
 ---
 
@@ -40,13 +40,13 @@ Summary of what the test team has verified: dvt init, dvt debug (Feature 02), an
 
 `ModuleNotFoundError: No module named 'dvt.include.global_project'`
 
-**Fix**: Added missing package in dvt-core:
+**Fix**: Added missing package in dvt-ce:
 
 - **`core/dvt/include/global_project/__init__.py`** with `PROJECT_NAME = "dvt"`.
 
 Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and `context/macros.py` for the internal macro namespace. Rebrand left references to this module but the package was not created.
 
-**Verification**: From `Testing_Playground/trial_dvt_init_2`: `uv sync --reinstall-package dvt-core` then `uv run dvt init Coke_DB --skip-profile-setup` — project `Coke_DB/` created successfully.
+**Verification**: From `Testing_Playground/trial_dvt_init_2`: `uv sync --reinstall-package dvt-ce` then `uv run dvt init Coke_DB --skip-profile-setup` — project `Coke_DB/` created successfully.
 
 ---
 
@@ -63,7 +63,7 @@ Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and
 
 ### Now verified (after dev-team fix)
 
-- **Full `dvt init Coke_DB` via installed package**: Run successfully from trial_dvt_init_2 after adding `dvt.include.global_project` and reinstalling dvt-core; project `Coke_DB/` created.
+- **Full `dvt init Coke_DB` via installed package**: Run successfully from trial_dvt_init_2 after adding `dvt.include.global_project` and reinstalling dvt-ce; project `Coke_DB/` created.
 
 ### Not verified (blocked by environment)
 
@@ -134,7 +134,7 @@ Used by `task/init.py` (reserved project name), `context/macro_resolver.py`, and
 ## 6. Recommendations
 
 1. **Run full flow once env is ready**: After `uv sync` completes in `core/` and Python/deps match CPU arch, run from Testing_Playground:  
-   `uv run --project .../dvt-core/core dvt init Coke_DB --skip-profile-setup`  
+   `uv run --project .../dvt-ce/core dvt init Coke_DB --skip-profile-setup`  
    Then run data-engineer and technical-qa checklists on the result.
 
 2. **Run negative cases**: Execute the negative-tester scenarios (invalid name, existing dir, invalid `--profile`) and record exit codes and message text.

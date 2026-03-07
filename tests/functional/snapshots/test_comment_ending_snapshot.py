@@ -16,7 +16,7 @@ snapshots_with_comment_at_end__snapshot_sql = """
         )
     }}
     select * from {{target.database}}.{{schema}}.seed
-    -- Test comment to prevent recurrence of https://github.com/dvt-labs/dvt-core/issues/6781
+    -- Test comment to prevent recurrence of https://github.com/dvt-labs/dvt-ce/issues/6781
 {% endsnapshot %}
 """
 

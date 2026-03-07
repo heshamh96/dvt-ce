@@ -30,7 +30,7 @@ from dbt_semantic_interfaces.type_enums import (
 
 """
 The classes in this file are dataclasses which are used to construct the Semantic
-Model node in dvt-core. Additionally, these classes need to at a minimum support
+Model node in dvt-ce. Additionally, these classes need to at a minimum support
 what is specified in their protocol definitions in dvt-semantic-interfaces.
 Their protocol definitions can be found here:
 https://github.com/dvt-labs/dvt-semantic-interfaces/blob/main/dbt_semantic_interfaces/protocols/semantic_model.py

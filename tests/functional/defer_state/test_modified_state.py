@@ -1176,7 +1176,7 @@ class TestVersionedContractVarcharSizeChange(BaseModifiedState):
     Test that changing varchar size (e.g., varchar(5) to varchar(20))
     does not trigger a breaking change error for versioned models.
     Per dvt docs, size/precision/scale changes should NOT be breaking changes.
-    Reproduces issue: https://github.com/dvt-labs/dvt-core/issues/11186
+    Reproduces issue: https://github.com/dvt-labs/dvt-ce/issues/11186
     """
 
     MODEL_UNIQUE_ID = "model.test.table_model.v1"

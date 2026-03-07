@@ -1162,9 +1162,9 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         self.assertEqual(len(result["packages"]), 0)  # Git package removed
 
     def test_check_duplicate_no_partial_word_match(self):
-        """Test that partial word matches are rejected (dvt-core shouldn't match dvt-core-utils)"""
+        """Test that partial word matches are rejected (dvt-ce shouldn't match dvt-ce-utils)"""
         mock_args = Namespace(
-            add_package={"name": "dvt-labs/dvt-core", "version": "1.0.0"}, source="hub"
+            add_package={"name": "dvt-labs/dvt-ce", "version": "1.0.0"}, source="hub"
         )
 
         with mock.patch("dvt.task.deps.BaseTask.__init__"):
@@ -1174,11 +1174,11 @@ class TestCheckForDuplicatePackagesWithBooleans(unittest.TestCase):
         packages_yml = {
             "packages": [
                 {
-                    "git": "https://github.com/dvt-labs/dvt-core-utils.git",
+                    "git": "https://github.com/dvt-labs/dvt-ce-utils.git",
                     "revision": "1.0.0",
                 },
                 {
-                    "package": "other-org/my-dvt-core-fork",
+                    "package": "other-org/my-dvt-ce-fork",
                     "version": "2.0.0",
                 },
             ]

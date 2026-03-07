@@ -1,10 +1,10 @@
-# Trial 10: Coke_DB – Full feature test (dvt-core from PyPI)
+# Trial 10: Coke_DB – Full feature test (dvt-ce from PyPI)
 
 **Trial folder**: `Testing_Playground/trial_10_coke_db`  
 **Project name**: **Coke_DB**  
 **Critical rule**: **DO NOT OVERRIDE** `profiles.yml` or `computes.yml`. New profile **Coke_DB** must be **appended** (or merged); existing profiles and compute blocks must remain.
 
-**Difference from Trial 6**: dvt-core is installed **from PyPI** (published package), not from a local path. This validates the released package with the same full-feature flow.
+**Difference from Trial 6**: dvt-ce is installed **from PyPI** (published package), not from a local path. This validates the released package with the same full-feature flow.
 
 Use the **testing agents** (test-team-technical-qa, test-team-data-engineer, test-team-negative-tester) to run and verify. Each agent uses this doc and their own rules; findings go under `trial_10_coke_db/findings/`.
 
@@ -13,18 +13,18 @@ Use the **testing agents** (test-team-technical-qa, test-team-data-engineer, tes
 ## 1. Trial setup (Testing Playground)
 
 - **Path**: `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`
-- **Trial folder**: `trial_10_coke_db` (uv project: `pyproject.toml`, `.venv`, **dvt-core from PyPI**).
+- **Trial folder**: `trial_10_coke_db` (uv project: `pyproject.toml`, `.venv`, **dvt-ce from PyPI**).
 - **Do not remove** existing trial folders. Do not overwrite `~/.dvt/profiles.yml` or `~/.dvt/computes.yml`; expect **append/merge** only.
 
-### dvt-core from PyPI
+### dvt-ce from PyPI
 
 1. Create the trial folder: `Testing_Playground/trial_10_coke_db`.
 2. Copy the template into it:
    ```bash
-   cp /path/to/dvt-core/docs/trial_10_pyproject.toml Testing_Playground/trial_10_coke_db/pyproject.toml
+   cp /path/to/dvt-ce/docs/trial_10_pyproject.toml Testing_Playground/trial_10_coke_db/pyproject.toml
    ```
-3. From the **trial folder** (`trial_10_coke_db`), run `uv sync`. The template sets `[tool.uv] index-url = "https://pypi.org/simple/"` so uv resolves dvt-core from PyPI without extra flags. dvt-core is installed from PyPI (no path or editable source). If uv reports "no version" right after a new dvt-core release, run `uv sync --refresh` once to refresh the index cache.
-4. Run all `dvt` commands from the trial folder (e.g. `uv run dvt sync --project-dir Coke_DB`) so the env that has dvt-core from PyPI is used.
+3. From the **trial folder** (`trial_10_coke_db`), run `uv sync`. The template sets `[tool.uv] index-url = "https://pypi.org/simple/"` so uv resolves dvt-ce from PyPI without extra flags. dvt-ce is installed from PyPI (no path or editable source). If uv reports "no version" right after a new dvt-ce release, run `uv sync --refresh` once to refresh the index cache.
+4. Run all `dvt` commands from the trial folder (e.g. `uv run dvt sync --project-dir Coke_DB`) so the env that has dvt-ce from PyPI is used.
 5. **If `uv sync` installs pyspark 4.x**: the template pins `pyspark==3.5.0` so it matches Coke_DB's computes. Re-copy the latest `docs/trial_10_pyproject.toml` so the trial has that pin, then `uv sync` again.
 
 ---
@@ -57,7 +57,7 @@ Use the **testing agents** (test-team-technical-qa, test-team-data-engineer, tes
 
 7. **Environment for sync**: Sync uses only (a) a venv **inside** the project dir (e.g. `Coke_DB/.venv`), or (b) `--python-env "/path/to/venv"` (use quotes). **Recommended**: from the **trial root** (`trial_10_coke_db`), run `uv run dvt sync --project-dir Coke_DB --python-env "$(pwd)/.venv"`. If you run from inside `Coke_DB/`, the trial's `.venv` is in the parent directory, so you **must** pass `--python-env` with the absolute path (e.g. `--python-env "/path/to/trial_10_coke_db/.venv"`); otherwise sync will prompt you interactively for the path, or in non-interactive mode fail with a message to stderr. Always use `uv run dvt ...` from the trial root.
 8. **Verify**: Adapters installed; pyspark version from **Coke_DB's** block in `~/.dvt/computes.yml` (active target's `version`); **`~/.dvt/.jdbc_jars/`** contains JARs for the adapter type(s) in Coke_DB profile (e.g. postgres).
-9. **Optional**: `uv run dvt sync --help` shows expected flags (same as released dvt-core on PyPI).
+9. **Optional**: `uv run dvt sync --help` shows expected flags (same as released dvt-ce on PyPI).
 
 ### 3.4 Debug (config, targets, computes, connection, full)
 
@@ -82,7 +82,7 @@ Use the **testing agents** (test-team-technical-qa, test-team-data-engineer, tes
 - [ ] Names: project name Coke_DB valid; `dbt_project.yml` has `profile: Coke_DB`; `profiles.yml` has key `Coke_DB`; `computes.yml` has key `Coke_DB` with `target` and `computes`.
 - [ ] Idempotency: re-running init in same dir does not overwrite existing user-level files; existing project dir handled per spec (e.g. ProjectNameAlreadyExists or no overwrite).
 - [ ] JDBC: after sync, `~/.dvt/.jdbc_jars/` exists and has JARs for Coke_DB's adapter type(s).
-- [ ] **PyPI**: dvt-core is from PyPI (trial uses `trial_10_pyproject.toml` with no path source for dvt-core); `uv run dvt --version` (or similar) reflects released version.
+- [ ] **PyPI**: dvt-ce is from PyPI (trial uses `trial_10_pyproject.toml` with no path source for dvt-ce); `uv run dvt --version` (or similar) reflects released version.
 
 **Findings**: `trial_10_coke_db/findings/technical_qa_checklist.md` (or findings.md).
 
@@ -116,7 +116,7 @@ Use the **testing agents** (test-team-technical-qa, test-team-data-engineer, tes
 
 ## 6. Summary
 
-- **Trial 10** = project **Coke_DB**, full feature pass, **append-only** for `profiles.yml` and `computes.yml`, **dvt-core installed from PyPI**.
+- **Trial 10** = project **Coke_DB**, full feature pass, **append-only** for `profiles.yml` and `computes.yml`, **dvt-ce installed from PyPI**.
 - **Sync** behaviour: same as other trials (env from in-project `.venv`/`venv`/`env` or `--python-env`, pyspark from profile's block in `~/.dvt/computes.yml`, JDBC to `~/.dvt/.jdbc_jars/`).
 - **Testing agents** use this doc and their rules; each records findings under `trial_10_coke_db/findings/`.
 - **Do not override** existing profiles or computes; verify Coke_DB is **added** and all prior content remains.

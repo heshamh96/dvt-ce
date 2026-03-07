@@ -5,7 +5,7 @@ This document provides an index of all **dev-team-*** and **test-team-*** sub-ag
 ## Overview
 
 All sub-agents follow these principles:
-- **Repository**: Work is done in the DVT repository (`git@github.com:heshamh96/dvt-core.git`)
+- **Repository**: Work is done in the DVT repository (`git@github.com:heshamh96/dvt-ce.git`)
 - **Default Branch**: Development happens on the **dev** branch
 - **Rebase Strategy**: Codebase is built on dbt-core; preserve ability to rebase **dev** onto **upstream/main** (dbt-core) without breaking changes
 - **Branch Flow**: dev → uat → prod (via PRs)
@@ -54,7 +54,7 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 ### dev-team-architecture
 - Ensures compliance with DVT RULES
 - Reviews architectural decisions
-- Maintains consistency with dvt-core-features
+- Maintains consistency with dvt-ce-features
 - Handles execution path resolution logic
 
 ### dev-team-backend
@@ -114,9 +114,9 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 - Challenges features with invalid project names, paths, CLI usage, and bad state
 - Ensures clear, actionable errors and no silent failures; encourages automated negative tests
 
-**Testing Playground**: All test-team agents run their tests under `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`. **Do not remove things.** Each test run uses a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv (pyproject.toml), its own .venv, and dvt-core installed inside it; you `cd` into the trial and run `uv run dvt ...` there. **Findings** are written in that folder under `findings/`.
+**Testing Playground**: All test-team agents run their tests under `/Users/hex/Documents/My_Projects/DVT/Testing_Playground`. **Do not remove things.** Each test run uses a **trial folder**: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv (pyproject.toml), its own .venv, and dvt-ce installed inside it; you `cd` into the trial and run `uv run dvt ...` there. **Findings** are written in that folder under `findings/`.
 
-**Environment**: Test-team agents use **Python** and **uv**. Each trial must be a **uv-contained folder** with the tool installed inside the trial (e.g. `uv init`, `uv add .../dvt-core/core`, `uv sync`, then `uv run dvt ...` from the trial)—not a shared env or standalone scripts.
+**Environment**: Test-team agents use **Python** and **uv**. Each trial must be a **uv-contained folder** with the tool installed inside the trial (e.g. `uv init`, `uv add .../dvt-ce/core`, `uv sync`, then `uv run dvt ...` from the trial)—not a shared env or standalone scripts.
 
 ## Important Reminders
 
@@ -124,11 +124,11 @@ When working on a specific area, reference the appropriate agent's Cursor rule f
 2. **Respect branch flow** - dev → uat → prod (via PRs)
 3. **Preserve rebase compatibility** - Changes must be rebaseable onto dbt-core
 4. **Reference DVT RULES** - The canonical rules are in `dvt_implementation_plan.md`
-5. **Check feature dependencies** - Review `dvt-core-features/` before making changes
+5. **Check feature dependencies** - Review `dvt-ce-features/` before making changes
 
 ## Related Documentation
 
 - [Running DVT](./RUNNING_DVT.md) - How to run the dvt CLI (venv, arch, test team)
 - [Branching and Rebase Strategy](./BRANCHING_AND_REBASE.md) - Git workflow documentation
 - `dvt_implementation_plan.md` - Canonical DVT RULES and implementation plan
-- `dvt-core-features/` - Feature specifications
+- `dvt-ce-features/` - Feature specifications

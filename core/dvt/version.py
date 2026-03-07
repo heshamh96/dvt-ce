@@ -13,7 +13,7 @@ from dbt_common.ui import green, yellow
 
 from dvt.dvt_tasks.lib.compute_version import get_compute_msg as _get_compute_msg
 
-PYPI_VERSION_URL = "https://pypi.org/pypi/dvt-core/json"
+PYPI_VERSION_URL = "https://pypi.org/pypi/dvt-ce/json"
 
 
 def get_version_information() -> str:
@@ -67,7 +67,7 @@ def _get_core_msg_lines(
 
     if latest is None:
         update_info = (
-            "  The latest version of dvt-core could not be determined!\n"
+            "  The latest version of dvt-ce could not be determined!\n"
             "  Make sure that the following URL is accessible:\n"
             f"  {PYPI_VERSION_URL}"
         )
@@ -81,7 +81,7 @@ def _get_core_msg_lines(
     elif installed < latest:
         latest_line[2] = yellow("Update available!")
         update_info = (
-            "  Your version of dvt-core is out of date!\n"
+            "  Your version of dvt-ce is out of date!\n"
             "  You can find instructions for upgrading here:\n"
             "  https://docs.getdbt.com/docs/installation"
         )
@@ -126,7 +126,7 @@ def _get_plugins_msg() -> str:
 
     if display_update_msg:
         update_msg = (
-            "  At least one plugin is out of date with dvt-core.\n"
+            "  At least one plugin is out of date with dvt-ce.\n"
             "  You can find instructions for upgrading here:\n"
             "  https://docs.getdbt.com/docs/installation"
         )

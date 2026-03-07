@@ -276,7 +276,7 @@ def _plant_stub_metadata(env_path: Path, package_name: str, version: str) -> Non
 
     Some community adapters check ``importlib.metadata.version("dbt-core")``
     or ``importlib.metadata.version("dbt-adapters")`` at import time.
-    DVT replaces both via dvt-core + dvt-adapters, so we plant minimal
+    DVT replaces both via dvt-ce + dvt-adapters, so we plant minimal
     package metadata that reports DVT's own version.
     """
     site_dirs = list(env_path.glob("lib/python*/site-packages"))
@@ -310,7 +310,7 @@ def _repair_dbt_namespace(env_path: Path, env_python: Path, pkg_manager: str) ->
     """Remove dbt-core and dbt-adapters pulled in by community adapter deps.
 
     Community adapters (dbt-postgres, dbt-mysql, etc.) declare dbt-core and
-    dbt-adapters as dependencies.  DVT replaces both with dvt-core + dvt-adapters,
+    dbt-adapters as dependencies.  DVT replaces both with dvt-ce + dvt-adapters,
     so the upstream packages must not be present (they write conflicting files
     into the dbt.* namespace).
 

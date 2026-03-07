@@ -95,7 +95,7 @@ def create_default_computes_yml(path: Optional[Path] = None) -> bool:
 #         jdbc_load: {...}
 #
 # Profiles are added automatically when you run 'dvt init <project_name>'.
-# See docs: https://github.com/heshamh96/dvt-core
+# See docs: https://github.com/heshamh96/dvt-ce
 """
     path.write_text(content)
     return True
@@ -128,7 +128,7 @@ def create_default_buckets_yml(path: Optional[Path] = None) -> bool:
 #         # path: /custom/path  # Optional, defaults to project's .dvt/staging/
 #
 # Profiles are added automatically when you run 'dvt init <project_name>'.
-# See docs: https://github.com/heshamh96/dvt-core
+# See docs: https://github.com/heshamh96/dvt-ce
 """
     path.write_text(content)
     return True

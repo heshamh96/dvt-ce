@@ -8,7 +8,7 @@ This document describes the Git workflow for DVT development, including branch s
 
 | Remote | URL | Purpose |
 |--------|-----|---------|
-| **origin** | `git@github.com:heshamh96/dvt-core.git` | Our DVT repository (default push/fetch) |
+| **origin** | `git@github.com:heshamh96/dvt-ce.git` | Our DVT repository (default push/fetch) |
 | **upstream** | `https://github.com/dbt-labs/dbt-core.git` | dbt-core source (for rebasing) |
 
 ### Current Remote Configuration
@@ -18,8 +18,8 @@ This document describes the Git workflow for DVT development, including branch s
 git remote -v
 
 # Expected output:
-# origin	git@github.com:heshamh96/dvt-core.git (fetch)
-# origin	git@github.com:heshamh96/dvt-core.git (push)
+# origin	git@github.com:heshamh96/dvt-ce.git (fetch)
+# origin	git@github.com:heshamh96/dvt-ce.git (push)
 # upstream	https://github.com/dbt-labs/dbt-core.git (fetch)
 # upstream	https://github.com/dbt-labs/dbt-core.git (push)
 ```
@@ -186,8 +186,8 @@ On GitHub, configure branch protection:
 
 ```bash
 # Clone the repository
-git clone git@github.com:heshamh96/dvt-core.git
-cd dvt-core
+git clone git@github.com:heshamh96/dvt-ce.git
+cd dvt-ce
 
 # Add upstream remote
 git remote add upstream https://github.com/dbt-labs/dbt-core.git

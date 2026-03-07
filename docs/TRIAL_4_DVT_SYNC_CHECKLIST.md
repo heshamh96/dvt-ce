@@ -52,7 +52,7 @@ Use this checklist when running **trial 4** in the Testing Playground (`trial_dv
 
 ## Trial folder setup (Testing Playground)
 
-1. Create `trial_dvt_sync_4` as a uv project with dvt-core installed via **local path, non-editable**. See **[docs/USING_LOCAL_DVT_WITH_UV.md](USING_LOCAL_DVT_WITH_UV.md)**. In the trial's `pyproject.toml`: `dependencies = ["dvt-core", ...]` and `[tool.uv.sources] dvt-core = { path = "/full/path/to/dvt-core/core", editable = false }`, then `uv sync`.
+1. Create `trial_dvt_sync_4` as a uv project with dvt-ce installed via **local path, non-editable**. See **[docs/USING_LOCAL_DVT_WITH_UV.md](USING_LOCAL_DVT_WITH_UV.md)**. In the trial's `pyproject.toml`: `dependencies = ["dvt-ce", ...]` and `[tool.uv.sources] dvt-ce = { path = "/full/path/to/dvt-ce/core", editable = false }`, then `uv sync`.
 2. Add a minimal `dbt_project.yml` with `profile: <name>` and `profiles.yml` with that profile and at least one target with `type: postgres` (or another supported adapter).
 3. Create `.venv` in the project or point sync to an existing env when prompted.
 4. Run `uv run dvt sync` from the trial folder.

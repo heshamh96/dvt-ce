@@ -175,7 +175,7 @@ def global_flags(func):
 @p.show_resource_report
 def cli(ctx, **kwargs):
     """An ELT tool for managing your SQL transformations and data models.
-    For more documentation on these commands, visit: github.com/heshamh96/dvt-core
+    For more documentation on these commands, visit: github.com/heshamh96/dvt-ce
     """
 
 
@@ -473,7 +473,7 @@ def deps(ctx, **kwargs):
     In the following case, a new `package-lock.yml` will be generated and the packages are installed:
     - user updated the packages.yml
     - user specify the flag --update, which means for packages that are specified as a
-      range, dvt-core will try to install the newer version
+      range, dvt-ce will try to install the newer version
     Otherwise, deps will use `package-lock.yml` as source of truth to install packages.
 
     There is a way to add new packages by providing an `--add-package` flag to deps command

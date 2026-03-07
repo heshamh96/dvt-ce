@@ -8,14 +8,14 @@
    - `test-team-negative-tester`: Bad inputs, edge cases, clear errors
 
 2. **Package workflow documented**: All agents require:
-   - Build and install dvt-core in dev mode: `cd core && uv sync`
+   - Build and install dvt-ce in dev mode: `cd core && uv sync`
    - Run installed `dvt` CLI from Testing_Playground (not standalone scripts)
 
 3. **Adapters shim** (`core/dvt/adapters/__init__.py`): Enables CLI to use existing `dbt-adapters` package
 
 4. **Testing_Playground** (`/Users/hex/Documents/My_Projects/DVT/Testing_Playground`): Directory for all test runs
 
-5. **Trial structure**: Do not remove or overwrite test runs. Each run goes in a folder: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv (pyproject.toml), its own .venv, and dvt-core installed inside it. You cd into the trial and run `uv run dvt ...` there. **Findings** are written under that folder in `findings/`. All agents follow this; see `.cursor/rules/test-team-*.mdc`.
+5. **Trial structure**: Do not remove or overwrite test runs. Each run goes in a folder: `trial_<what_we_are_testing>_<number>` (e.g. `trial_dvt_init_1`). **Each trial is a self-contained uv project**: the trial has its own uv (pyproject.toml), its own .venv, and dvt-ce installed inside it. You cd into the trial and run `uv run dvt ...` there. **Findings** are written under that folder in `findings/`. All agents follow this; see `.cursor/rules/test-team-*.mdc`.
 
 6. **Trial 3 – Integration**: `trial_integration_3` is used to test **all implemented features together** (init, parse, debug) in one flow. Test team agents (data-engineer, technical-qa, negative-tester) each have a **Trial 3** section in their rules; they should run trial_integration_3 to ensure features work together without breaking one another. See `.cursor/rules/test-team-*.mdc` for the trial_integration_3 checklist and scenarios.
 
@@ -23,14 +23,14 @@
 
 ### Each trial is a uv-contained project (how to test)
 
-**Each trial folder is a self-contained uv project:** it has its own uv setup, its own .venv, and the tool (dvt-core) installed inside it. So each trial is a uv-contained folder/environment.
+**Each trial folder is a self-contained uv project:** it has its own uv setup, its own .venv, and the tool (dvt-ce) installed inside it. So each trial is a uv-contained folder/environment.
 
 1. **Create a trial folder**: e.g. `Testing_Playground/trial_dvt_init_1`.
 2. **Make the trial a uv project and install the tool inside it**:
    ```bash
    cd /Users/hex/Documents/My_Projects/DVT/Testing_Playground/trial_dvt_init_1
    uv init
-   uv add /Users/hex/Documents/My_Projects/DVT/dvt-core/core
+   uv add /Users/hex/Documents/My_Projects/DVT/dvt-ce/core
    uv sync
    ```
    The trial now has its own `.venv` and `dvt` installed inside it.
@@ -46,17 +46,17 @@
 
 - **Python environment** with matching CPU architecture (arm64 on Apple Silicon, x86_64 on Intel)
 - **uv** installed on your system (`brew install uv` or equivalent)
-- **dbt-adapters** package (e.g. `dbt-postgres`) installed alongside dvt-core when you run `uv sync` in core
+- **dbt-adapters** package (e.g. `dbt-postgres`) installed alongside dvt-ce when you run `uv sync` in core
 
 ### Workflow
 
 1. **Create a trial folder** (do not remove existing ones): e.g. `Testing_Playground/trial_dvt_init_1`.
 
-2. **Make the trial a uv project and install dvt-core inside it**:
+2. **Make the trial a uv project and install dvt-ce inside it**:
    ```bash
    cd /Users/hex/Documents/My_Projects/DVT/Testing_Playground/trial_dvt_init_1
    uv init
-   uv add /Users/hex/Documents/My_Projects/DVT/dvt-core/core
+   uv add /Users/hex/Documents/My_Projects/DVT/dvt-ce/core
    uv sync
    ```
    The trial now has its own .venv and dvt; ensure Python/deps match your CPU arch.
@@ -89,6 +89,6 @@
 - `.cursor/rules/test-team-*.mdc` - Agent rules and responsibilities
 - `docs/RUNNING_DVT.md` - How to run dvt CLI
 - `docs/TEAM_AGENTS.md` - All agents overview
-- `dvt-core-features/01-dvt-init/FEATURE.md` - Feature spec and acceptance criteria
-- `dvt-core-features/02-dvt-debug/FEATURE.md` - Feature 02 dvt debug (targets = current profile only)
+- `dvt-ce-features/01-dvt-init/FEATURE.md` - Feature spec and acceptance criteria
+- `dvt-ce-features/02-dvt-debug/FEATURE.md` - Feature 02 dvt debug (targets = current profile only)
 - `Testing_Playground/trial_dvt_debug_1/findings/` - Feature 02 debug trial findings

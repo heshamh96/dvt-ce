@@ -223,7 +223,7 @@ class TestConfig(NodeAndTestConfig):
 
         The intention of this block is to behave as if `store_failures_as` is the only setting,
         but still allow for backwards compatibility for `store_failures`.
-        See https://github.com/dvt-labs/dvt-core/issues/6914 for more information.
+        See https://github.com/dvt-labs/dvt-ce/issues/6914 for more information.
         """
         super().finalize_and_validate()
 

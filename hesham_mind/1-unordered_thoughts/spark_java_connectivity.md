@@ -80,7 +80,7 @@ my_profile:
 #   - computes: Compute engine definitions
 #
 # DVT supports Spark 3.x and 4.x only. Spark 2.x is NOT supported.
-# See docs: https://github.com/heshamh96/dvt-core
+# See docs: https://github.com/heshamh96/dvt-ce
 
 default:
   target: default

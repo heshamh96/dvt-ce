@@ -26,7 +26,7 @@ def dbt_hook(func):
 class dvtPlugin:
     """
     EXPERIMENTAL: dvtPlugin is the base class for creating plugins.
-    Its interface is **not** stable and will likely change between dvt-core versions.
+    Its interface is **not** stable and will likely change between dvt-ce versions.
     """
 
     def __init__(self, project_name: str) -> None:

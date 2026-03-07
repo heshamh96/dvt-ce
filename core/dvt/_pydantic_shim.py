@@ -2,10 +2,10 @@
 
 """Shim to allow support for both Pydantic 1 and Pydantic 2.
 
-dvt-core must support both major versions of Pydantic because dvt-core users might be using an environment with
+dvt-ce must support both major versions of Pydantic because dvt-ce users might be using an environment with
 either version, and we can't restrict them to one or the other. Here, we essentially import all Pydantic objects
 from version 1 that we use. Throughout the repo, we import these objects from this file instead of from Pydantic
-directly, meaning that we essentially only use Pydantic 1 in dvt-core currently, but without forcing that restriction
+directly, meaning that we essentially only use Pydantic 1 in dvt-ce currently, but without forcing that restriction
 on dvt users. The development environment for this repo should be pinned to Pydantic 1 to ensure devs get appropriate
 type hints.
 """

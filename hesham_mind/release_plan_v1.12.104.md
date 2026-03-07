@@ -2,16 +2,16 @@
 
 **Date**: 2026-02-22
 **Branch**: `dev` -> `uat` -> `master`
-**PyPI**: `dvt-core` (existing project, versions 1.12.0–1.12.103 published, 0.1.0 yanked)
+**PyPI**: `dvt-ce` (existing project, versions 1.12.0–1.12.103 published, 0.1.0 yanked)
 
 ## Decisions
 
 | Decision | Choice |
 |----------|--------|
 | License | Apache 2.0 (open source, compliant with dbt-core upstream) |
-| GitHub repo | Public at github.com/heshamh96/dvt-core |
+| GitHub repo | Public at github.com/heshamh96/dvt-ce |
 | Version | 1.12.104 |
-| PyPI package name | dvt-core |
+| PyPI package name | dvt-ce |
 | Platform support | macOS + Linux (ARM + x86), no Windows |
 | Build tooling | `python3 -m build` + `twine upload` |
 
@@ -55,13 +55,13 @@ git push origin dev --force-with-lease
 - After release, can set `master` as default branch in GitHub settings
 
 ### A2. PyPI Token
-- Already has PyPI account with `dvt-core` project
+- Already has PyPI account with `dvt-ce` project
 - Token configured (or will be prompted during `twine upload`)
 
 ### A3. Post-Publish Verification
 ```bash
 python3 -m venv /tmp/test-dvt && source /tmp/test-dvt/bin/activate
-pip install dvt-core
+pip install dvt-ce
 dvt --version    # should show 1.12.104
 dvt init test_project
 deactivate && rm -rf /tmp/test-dvt
@@ -96,7 +96,7 @@ deactivate && rm -rf /tmp/test-dvt
 - Remove `"Operating System :: Microsoft :: Windows"` classifier
 - Ensure `license = "Apache-2.0"`
 - Add NOTICE to `license-files`
-- Verify `project.urls` point to github.com/heshamh96/dvt-core
+- Verify `project.urls` point to github.com/heshamh96/dvt-ce
 
 ### B4. Clean Up Old Branches
 - Delete local: `extraction_enhancement`, `prod`
@@ -118,8 +118,8 @@ git tag v1.12.104 master
 cd core
 python3 -m build
 # Verify contents:
-tar tf dist/dvt_core-1.12.104.tar.gz | grep -E "LICENSE|NOTICE"
-unzip -l dist/dvt_core-1.12.104-py3-none-any.whl | grep -E "LICENSE|NOTICE"
+tar tf dist/dvt_ce-1.12.104.tar.gz | grep -E "LICENSE|NOTICE"
+unzip -l dist/dvt_ce-1.12.104-py3-none-any.whl | grep -E "LICENSE|NOTICE"
 ```
 
 ### B8. Create Publish Skill
@@ -139,13 +139,13 @@ git push origin v1.12.104
 ### B11. Publish to PyPI
 ```bash
 cd core
-python3 -m twine upload dist/dvt_core-1.12.104*
+python3 -m twine upload dist/dvt_ce-1.12.104*
 ```
 
 ## PyPI Yanked 0.1.0 — Not Problematic
 
-- Yanked version still exists but `pip install dvt-core` ignores it
-- Only `pip install dvt-core==0.1.0` (explicit pin) would install it
+- Yanked version still exists but `pip install dvt-ce` ignores it
+- Only `pip install dvt-ce==0.1.0` (explicit pin) would install it
 - Publishing 1.12.104 is independent, no conflict
 - Users see 1.12.104 as latest; 0.1.0 shows as yanked in history
 

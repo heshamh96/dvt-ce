@@ -123,7 +123,7 @@ class LogDbtProfileError(ErrorLevel):
         msg += """
 For more information on configuring profiles, please consult the DVT docs:
 
-https://github.com/heshamh96/dvt-core#configuration-files
+https://github.com/heshamh96/dvt-ce#configuration-files
 """
         return msg
 
@@ -228,7 +228,7 @@ Next steps:
   4. Run 'dvt debug' to verify all connections
   5. Run 'dvt run' to execute your models
 
-Documentation: https://github.com/heshamh96/dvt-core
+Documentation: https://github.com/heshamh96/dvt-ce
 Need help? https://discord.gg/UjQcxJXAQp
 """
 
@@ -341,12 +341,12 @@ class MetricAttributesRenamed(WarnLevel):
 
     def message(self) -> str:
         description = (
-            "dvt-core v1.3 renamed attributes for metrics:"
+            "dvt-ce v1.3 renamed attributes for metrics:"
             "\n  'sql'              -> 'expression'"
             "\n  'type'             -> 'calculation_method'"
             "\n  'type: expression' -> 'calculation_method: derived'"
             f"\nPlease remove them from the metric definition of metric '{self.metric_name}'"
-            "\nRelevant issue here: https://github.com/dvt-labs/dvt-core/issues/5849"
+            "\nRelevant issue here: https://github.com/dvt-labs/dvt-ce/issues/5849"
         )
 
         if require_event_names_in_deprecations():
@@ -367,7 +367,7 @@ class ExposureNameDeprecation(WarnLevel):
             "numbers, and underscores. Exposures support a new property, 'label', which may "
             f"contain spaces, capital letters, and special characters. {self.exposure} does not "
             "follow this pattern. Please update the 'name', and use the 'label' property for a "
-            "human-friendly title. This will raise an error in a future version of dvt-core."
+            "human-friendly title. This will raise an error in a future version of dvt-ce."
         )
 
         if require_event_names_in_deprecations():
@@ -387,7 +387,7 @@ class InternalDeprecation(WarnLevel):
         if self.reason:
             extra_reason = f"\n{self.reason}"
         msg = (
-            f"`{self.name}` is deprecated and will be removed in dvt-core version {self.version}\n\n"
+            f"`{self.name}` is deprecated and will be removed in dvt-ce version {self.version}\n\n"
             f"Adapter maintainers can resolve this deprecation by {self.suggested_action}. {extra_reason}"
         )
 
@@ -427,7 +427,7 @@ class ConfigLogPathDeprecation(WarnLevel):
         env_var = "DBT_LOG_PATH"
         description = (
             f"The `{self.deprecated_path}` config in `dbt_project.yml` has been deprecated, "
-            f"and will no longer be supported in a future version of dvt-core. "
+            f"and will no longer be supported in a future version of dvt-ce. "
             f"If you wish to write dvt {output} to a custom directory, please use "
             f"the {cli_flag} CLI flag or {env_var} env var instead."
         )
@@ -450,7 +450,7 @@ class ConfigTargetPathDeprecation(WarnLevel):
         env_var = "DBT_TARGET_PATH"
         description = (
             f"The `{self.deprecated_path}` config in `dbt_project.yml` has been deprecated, "
-            f"and will no longer be supported in a future version of dvt-core. "
+            f"and will no longer be supported in a future version of dvt-ce. "
             f"If you wish to write dvt {output} to a custom directory, please use "
             f"the {cli_flag} CLI flag or {env_var} env var instead."
         )
@@ -807,6 +807,7 @@ class DuplicateNameDistinctNodeTypesDeprecation(WarnLevel):
     def message(self) -> str:
         description = f"Found resources with the same name '{self.resource_name}' in package '{self.package_name}': '{self.unique_id1}' and '{self.unique_id2}'. Please update one of the resources to have a unique name."
         return line_wrap_message(_deprecation_tag(description, self.__class__.__name__))
+
 
 class TimeDimensionsRequireGranularityDeprecation(WarnLevel):
     def code(self) -> str:
@@ -2201,7 +2202,7 @@ class InternalErrorOnRun(DebugLevel):
         prefix = f"Internal error executing {self.build_path}"
 
         internal_error_string = """This is an error in dvt. Please try again. If \
-the error persists, open an issue at https://github.com/dvt-labs/dvt-core
+the error persists, open an issue at https://github.com/dvt-labs/dvt-ce
 """.strip()
 
         return f"{red(prefix)}\n{str(self.exc).strip()}\n\n{internal_error_string}"

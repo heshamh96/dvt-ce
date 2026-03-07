@@ -123,7 +123,7 @@ dvt snapshot                                       | disf_dev         | PASS=1 W
 # ================================================================================
 # DATE: 2026-03-02 (post dvt-adapters integration — import shim fix)
 # Context: Fixed import timing issue in dvt-adapters/src/dvt/__init__.py
-#          dvt-core commit: 085642f2c | dvt-adapters commit: a46c878
+#          dvt-ce commit: 085642f2c | dvt-adapters commit: a46c878
 # ================================================================================
 
 # PHASE 15: dvt debug (all 9 targets) — 2026-03-02 11:20:42
@@ -168,7 +168,7 @@ pytest tests/unit/ -q                              | local            | 2254 pas
 # DATE: 2026-03-04 (full end-to-end verification — all 65 models, 9 engines)
 # Context: Schema quoting fix (query_optimizer.py, dialect_fallbacks.py),
 #          Databricks token refreshed, all pushdown+federation models verified.
-#          dvt-core commit: 16163f530 (on dev, pushed to origin)
+#          dvt-ce commit: 16163f530 (on dev, pushed to origin)
 #          max_federation_threads: 1 (serialized — JVM resource limit)
 # Engines: pg_docker, mysql_docker, mssql_docker, oracle_docker, mariadb_docker,
 #          pg_dev, sf_dev (read), disf_dev (write), dbx_dev
@@ -188,7 +188,7 @@ dvt run                                            | all 9 engines    | PASS=65 
 # DATE: 2026-03-06 (Adapter E2E + CLI UAT — Testing Factory validation)
 # Context: Updated Testing Factory for 8 engines (5 Docker + 3 external).
 #          Added 8 new federation models (17 total in adapter test project).
-#          dvt-core commits: b25b0d615 (quoting fix), 0ec388b42 (testing-factory docs)
+#          dvt-ce commits: b25b0d615 (quoting fix), 0ec388b42 (testing-factory docs)
 # ================================================================================
 
 # PHASE 25: CLI UAT (19 commands) — 2026-03-06 18:31
