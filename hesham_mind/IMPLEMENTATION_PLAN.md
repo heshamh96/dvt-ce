@@ -90,8 +90,14 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
 
 - For each model, check if any `source()` reference has a `connection` (from sources.yml) that differs from the model's target (from profiles.yml default or model config)
 - Validate that remote source connections exist in profiles.yml
-- Build extraction plan: which source tables need Sling extraction to `_dvt` staging
-- Determine staging table names: `_dvt.{source_name}__{table_name}`
+- **Count** remote sources per model to determine extraction sub-path:
+  - 1 remote source → Sling Direct (sub-path 3a)
+  - 2+ remote sources → DuckDB Compute (sub-path 3b)
+- Build extraction plan: which source tables need extraction and via which sub-path
+- Validate materialization constraints:
+  - DuckDB Compute + `incremental` → DVT112 error
+  - Any extraction + `ephemeral` → DVT110 error
+  - Any extraction + `view` → coerce to `table` (DVT001 warning)
 
 ### P1.4: Sling client wrapper (Week 4)
 
@@ -112,11 +118,21 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
   - Override `get_runner()` to return DvtModelRunner
   - Reuse ALL dbt lifecycle decorators
 
-- `DvtModelRunner(ModelRunner)`:
-  - Detect source-target mismatch → auto-extract remote sources via Sling to `_dvt` staging
-  - For models with remote sources: extract source tables to staging, then run model SQL on target via adapter
-  - For pushdown models (all sources local): delegates to `super().execute()` (stock dbt)
-  - For cross-target models: execute on default target, then Sling to model target
+- `DvtModelRunner(ModelRunner)` — three-way dispatch + two sub-paths:
+  - **Pushdown** (all sources local): delegates to `super().execute()` (stock dbt)
+  - **Sling Direct** (1 remote source): Sling streams source → model's named table on target. Supports incremental (Sling handles watermark + merge).
+  - **DuckDB Compute** (2+ remote sources): Sling streams each source → DuckDB (in-memory). Model SQL runs in DuckDB. Sling streams result → model's table on target. Table materialization only.
+  - For cross-target models (target != default, all sources local): execute on default target, then Sling to model target
+
+### P1.7: DuckDB extraction compute engine (Week 6)
+
+`core/dvt/federation/duckdb_compute.py`
+
+- DuckDB in-process engine for multi-source extraction
+- Methods: `load_sources()`, `execute_model_sql()`, `export_result()`
+- Sling integration: stream sources into DuckDB, stream result out
+- Memory management: configurable memory_limit, temp_directory for spill
+- Ephemeral: DuckDB instance created per model, destroyed after completion
 
 ### P1.6: Cross-engine incremental wiring (Weeks 5-6)
 
@@ -124,18 +140,23 @@ Update entry_points to include `dvt = dvt.cli.main:cli` (already done).
 - Format watermark as dialect-specific literal for source engine
 - Substitute literal into compiled SQL before sending to Sling
 - Map dbt incremental strategy → Sling merge strategy
+- **Only for single-source extraction (Sling Direct).** Multi-source incremental → DVT112 error.
 - Test: incremental extraction model across Postgres → Snowflake
 
-### P1.7: Integration testing (Week 7)
+### P1.8: Integration testing (Week 7)
 
-- End-to-end test: model with remote source (Postgres source → Postgres target via _dvt staging)
-- End-to-end test: remote source extraction + pushdown model (Postgres → Snowflake)
-- Verify incremental models with remote sources work across runs with dialect-specific watermarks
+- End-to-end test: single remote source → Sling Direct (Postgres → Snowflake, direct to model table)
+- End-to-end test: multiple remote sources → DuckDB Compute (Postgres + SQL Server → DuckDB → Snowflake)
+- End-to-end test: pushdown model (all sources on target)
+- Verify incremental single-source models work across runs with dialect-specific watermarks
+- Verify multi-source incremental raises DVT112 error
 - Verify `--full-refresh` forces full extraction + full rebuild
 - Verify `--select` only runs selected models
+- Verify no `_dvt` staging tables are created anywhere
 
-**Phase 1 Deliverable:** `dvt run` with automatic source extraction via Sling
-(transparent to user) and pushdown models via adapter. Cross-engine incremental works.
+**Phase 1 Deliverable:** `dvt run` with three-way dispatch: pushdown, Sling Direct
+(single-source extraction), and DuckDB Compute (multi-source extraction). Cross-engine
+incremental works for single-source models. No hidden staging tables.
 
 ---
 
@@ -205,11 +226,13 @@ and incremental extraction + transformation.
 `core/dvt/tasks/show.py`
 `core/dvt/federation/engine.py`
 
-- DuckDB in-process engine
+- DuckDB in-process engine (reuses `duckdb_compute.py` infrastructure from P1.7)
 - ATTACH to source databases where supported
 - SQLGlot transpilation for target-dialect SQL → DuckDB SQL
 - Source resolution: `{{ source() }}` → ATTACH'd table or scanner view
 - Display results in terminal (table, csv, json formats)
+- Note: DuckDB is already integrated for multi-source extraction in P1;
+  `dvt show` reuses the same DuckDB infrastructure
 
 ### P3.2: dvt debug (Week 14)
 
@@ -286,7 +309,7 @@ debugging, and documentation.
 | Phase | Weeks | Deliverable |
 |-------|-------|-------------|
 | P0: Scaffold + Sync | 1-2 | `dvt sync`, project structure, CLI |
-| P1: Core Pipeline | 3-7 | `dvt run` with extraction + pushdown |
+| P1: Core Pipeline | 3-7 | `dvt run` with Sling Direct + DuckDB Compute + pushdown |
 | P2: Seeds, Cross-Target, Buckets | 8-12 | Full ELT, Sling seeds, Delta buckets |
 | P3: Local Dev, Debug, Polish | 13-16 | `dvt show`, `dvt debug`, docs |
 | P4: Advanced | 17-24 | Federation optimizer, CDC, virtual |
@@ -303,6 +326,7 @@ debugging, and documentation.
 | dbt adapter config parsing for Sling URLs | Start with top 6 adapters, add others incrementally |
 | Watermark formatting for exotic dialects | Start with top 12 dialects, add others as needed |
 | Cross-engine incremental watermark resolution | Pre-resolve from target, substitute literal. Test extensively. |
-| Source extraction performance for large tables | Use incremental watermarks to limit extraction volume. Monitor staging table sizes. |
+| Source extraction performance for large tables | Use incremental watermarks to limit extraction volume (single-source only). |
+| **DuckDB memory limits for multi-source extraction** | **Configurable memory_limit + temp_directory for spill-to-disk. Monitor and document sizing guidelines. Large multi-source joins may exceed memory — recommend splitting into smaller models or using incremental single-source extraction where possible.** |
 | Sling CDC requires Pro license | Document as optional feature, ensure free-tier works without CDC |
-| DuckDB ATTACH limitations (read-only, limited dialect support) | Use as dev tool only, not production path |
+| DuckDB ATTACH limitations (read-only, limited dialect support) | Use as dev tool only (dvt show), not production pushdown path |
