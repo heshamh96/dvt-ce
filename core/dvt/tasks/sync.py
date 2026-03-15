@@ -35,7 +35,7 @@ from dvt.sync.adapter_installer import (
 )
 from dvt.sync.duckdb_extensions import get_required_extensions, install_extensions
 from dvt.sync.cloud_deps import get_required_cloud_packages, install_cloud_packages
-from dvt.sync.sling_checker import check_sling
+from dvt.sync.sling_checker import ensure_sling
 
 
 def _status_icon(status: str) -> str:
@@ -178,16 +178,20 @@ class DvtSyncTask:
         print()
 
         # ---------------------------------------------------------------
-        # Step 5: Check Sling
+        # Step 5: Ensure Sling (bootstrap binary if needed)
         # ---------------------------------------------------------------
         print("  Sling:")
-        sling_available, sling_version = check_sling()
+        sling_available, sling_version, sling_status = ensure_sling(
+            dry_run=self.dry_run
+        )
         pad = "." * 24
         if sling_available:
-            print(f"    binary {pad} sling {sling_version} [installed]")
+            print(f"    binary {pad} sling {sling_version} [{sling_status}]")
+        elif sling_status == "dry_run":
+            print(f"    binary {pad} [dry-run]")
         else:
             print(f"    binary {pad} [NOT FOUND]")
-            print("    Install: https://docs.slingdata.io/sling-cli/getting-started")
+            print("    pip install sling, then run dvt sync again.")
             print("    Sling is required for cross-engine extraction.")
         print()
 
