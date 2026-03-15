@@ -18,23 +18,39 @@ logger = logging.getLogger(__name__)
 
 
 class SlingClient:
-    """Wrapper around the Sling Python package for DVT operations."""
+    """Wrapper around the Sling Python package for DVT operations.
+
+    Defers sling import to first use to avoid hangs when sling binary
+    is not installed (the sling Python package tries to download it on import).
+    """
 
     def __init__(self) -> None:
+        self._Replication = None
+        self._ReplicationStream = None
+        self._checked = False
+        self._available = False
+
+    def _ensure_loaded(self) -> None:
+        """Lazy-load the sling package on first use."""
+        if self._checked:
+            return
+        self._checked = True
         try:
             from sling import Replication, ReplicationStream
 
             self._Replication = Replication
             self._ReplicationStream = ReplicationStream
             self._available = True
-        except ImportError:
+        except (ImportError, Exception):
             self._available = False
 
     @property
     def available(self) -> bool:
+        self._ensure_loaded()
         return self._available
 
     def _check_available(self) -> None:
+        self._ensure_loaded()
         if not self._available:
             raise RuntimeError(
                 "DVT106: Sling is required for cross-engine extraction but was not found. "

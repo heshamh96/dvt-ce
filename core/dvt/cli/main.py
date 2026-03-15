@@ -61,9 +61,9 @@ def cli(ctx, **kwargs):
 @requires.manifest
 def build(ctx, **kwargs):
     """Run all seeds, models, snapshots, and tests in DAG order."""
-    from dbt.task.build import BuildTask
+    from dvt.tasks.build import DvtBuildTask
 
-    task = BuildTask(
+    task = DvtBuildTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
         ctx.obj["manifest"],
