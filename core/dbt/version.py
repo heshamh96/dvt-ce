@@ -103,7 +103,9 @@ def _get_plugins_msg() -> str:
     plugins = []
     display_update_msg = False
     for name, version_s in _get_dbt_plugins_info():
-        compatability_msg, needs_update = _get_plugin_msg_info(name, version_s, installed)
+        compatability_msg, needs_update = _get_plugin_msg_info(
+            name, version_s, installed
+        )
         if needs_update:
             display_update_msg = True
         plugins.append([name, version_s, compatability_msg])
@@ -226,5 +228,5 @@ def _get_adapter_plugin_names() -> Iterator[str]:
             yield plugin_name
 
 
-__version__ = "1.9.10"
+__version__ = "0.1.2"
 installed = get_installed_version()
