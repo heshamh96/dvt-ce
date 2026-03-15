@@ -2,9 +2,9 @@
 Install cloud SDK dependencies based on bucket types found in profiles.yml.
 """
 
-import subprocess
-import sys
 from typing import Dict, List, Set, Tuple
+
+from dvt.sync.adapter_installer import _pip_install
 
 # Maps bucket type → pip package(s) needed
 BUCKET_TO_PACKAGES: Dict[str, List[str]] = {
@@ -40,14 +40,9 @@ def install_cloud_packages(
             results.append((package, "dry_run"))
             continue
 
-        try:
-            subprocess.check_call(
-                [sys.executable, "-m", "pip", "install", package, "--quiet"],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.PIPE,
-            )
+        if _pip_install(package):
             results.append((package, "installed"))
-        except subprocess.CalledProcessError:
+        else:
             results.append((package, "failed"))
 
     return results
