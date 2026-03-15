@@ -101,8 +101,10 @@ my_project:
 
 | Connection role | How DVT uses it |
 |----------------|----------------|
-| Default target | dbt adapter pushes down model SQL |
-| Source connection | Sling extracts data to default target |
+| Default target | dbt adapter pushes down model SQL (pushdown models) |
+| Source connection (1 remote) | Sling Direct: streams source → model table on target |
+| Source connection (2+ remote) | DuckDB Compute: Sling → DuckDB → model SQL → Sling → model table on target |
+| Non-default target (all sources local) | Non-default pushdown: adapter pushes down on non-default target |
 | Alternate target (DB) | Sling loads model results to this DB |
 | Alternate target (bucket) | Sling writes model results as Delta/Parquet/CSV |
 
@@ -154,21 +156,23 @@ Users write **standard dbt models** — no `connection` or `sling` config on mod
 DVT automatically detects when Sling extraction is needed by comparing
 `source.connection` (from sources.yml) vs `model.target` (from profiles.yml default or model config).
 
-### Standard model referencing a remote source
+### Extraction model — single remote source (Sling Direct)
 
 ```sql
 -- models/staging/stg_customers.sql
--- This is a standard dbt model. DVT detects that source('crm', 'customers')
--- lives on source_postgres (remote) and auto-extracts it to _dvt staging.
+-- EXTRACTION MODEL: Written in DuckDB SQL (universal for single-source SELECT)
+-- DVT detects: source on source_postgres, target is prod_snowflake → Sling Direct
+-- Result lands directly as stg_customers table on target. No hidden staging.
 {{ config(materialized='table') }}
 SELECT * FROM {{ source('crm', 'customers') }}
 ```
 
-### Incremental model referencing a remote source
+### Extraction model — single remote source, incremental (Sling Direct)
 
 ```sql
 -- models/staging/stg_orders.sql
--- Standard dbt incremental model. DVT handles cross-engine extraction transparently.
+-- EXTRACTION MODEL: Written in DuckDB SQL. Incremental supported for single source.
+-- DVT pre-resolves watermark, formats in source dialect, Sling merges into model table.
 {{ config(
     materialized='incremental',
     unique_key='id'
@@ -180,7 +184,18 @@ WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
 {% endif %}
 ```
 
-DVT pre-resolves the watermark and formats it in the source's dialect for the extraction query.
+### Extraction model — multiple remote sources (DuckDB Compute)
+
+```sql
+-- models/staging/stg_combined.sql
+-- EXTRACTION MODEL: Written in DuckDB SQL. DuckDB is the compute engine.
+-- Must be 'table' materialization (incremental NOT supported for multi-source).
+-- Sling streams each source → DuckDB, SQL runs in DuckDB, result → target.
+{{ config(materialized='table') }}
+SELECT c.id, c.name, i.invoice_total
+FROM {{ source('crm', 'customers') }} c
+JOIN {{ source('erp', 'invoices') }} i ON c.id = i.customer_id
+```
 
 ### target (per-model target override)
 
@@ -245,10 +260,8 @@ seeds:
   my_project:
     +schema: seeds
 
-# DVT-specific project config (optional)
-dvt:
-  staging_schema: _dvt             # schema for auto-extracted source staging tables
-                                   # default: _dvt. Tables: _dvt.{source_name}__{table_name}
+# No dvt.staging_schema needed — DVT does not create hidden staging tables.
+# Results land directly as model tables on the target.
 ```
 
 ## Model Naming
@@ -267,8 +280,8 @@ models/
     fct_orders.sql             ← pushdown (refs stg_orders + stg_customers)
 ```
 
-DVT auto-extracts remote sources into `_dvt` staging tables before model execution.
-Downstream models reference staging models via `{{ ref('stg_customers') }}` — standard dbt behavior.
+DVT handles extraction automatically — no hidden staging tables. Extraction model results
+land directly as model tables. Downstream models reference them via `{{ ref('stg_customers') }}`.
 
 ## Environment Variables
 

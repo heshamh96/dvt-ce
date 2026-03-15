@@ -2,10 +2,66 @@
 
 ## Scope
 
-DuckDB is NOT DVT's core compute engine. The target database (via dbt adapters)
-handles model execution. DuckDB serves three specific, scoped purposes.
+DuckDB serves two production roles and two development roles in DVT:
 
-## Purpose 1: dvt show (Local Development)
+1. **Cross-engine compute for multi-source extraction** (`dvt run`) — P1 feature
+2. **Local development queries** (`dvt show`) — P3 feature
+3. **Local file/API processing** — development use
+4. **Virtual federation** (future) — P4 feature
+
+For pushdown models (all sources local) and single-source extraction (Sling Direct),
+DuckDB is not involved. The target database (via dbt adapters) handles pushdown;
+Sling handles single-source streaming.
+
+## Purpose 1: Cross-Engine Compute for Multi-Source Extraction
+
+**What:** When a model references 2+ remote sources, DuckDB is the in-process compute
+engine. Sling streams each remote source into DuckDB, the model SQL executes in DuckDB,
+and Sling streams the result to the model's named table on the target.
+
+**This is a P1 feature** — part of the core `dvt run` pipeline.
+
+**How:**
+1. DuckDB starts in-process (ephemeral, in-memory)
+2. For each remote source, Sling streams data into DuckDB
+3. Model SQL executes in DuckDB (user wrote it in DuckDB SQL)
+4. Sling streams the result from DuckDB to the target
+5. DuckDB instance is destroyed
+
+**Flow:**
+```
+Source A (Postgres)     Source B (SQL Server)
+    │                       │
+    │ Sling                 │ Sling
+    ▼                       ▼
+┌────────────────────────────────┐
+│         DuckDB (in-memory)     │
+│                                │
+│  sources loaded as tables      │
+│  model SQL runs here           │
+│  (DuckDB SQL syntax)           │
+└────────────────────────────────┘
+                │
+                │ Sling
+                ▼
+         Target (Snowflake)
+         model's named table
+```
+
+**Constraints:**
+- Only `table` materialization is supported
+- `incremental` → DVT112 error (not supported for multi-source)
+- `view` → coerced to `table` (DVT001 warning)
+- `ephemeral` → DVT110 error
+
+**User-facing rule:** All extraction models (any model with remote sources) must be
+written in **DuckDB SQL** syntax. For single-source models, the SQL is universal enough
+for Sling to execute on the source. For multi-source models, DuckDB executes the SQL.
+
+**Memory management:** DuckDB memory is configurable. For large multi-source extractions,
+monitor memory usage. See Configuration section below.
+
+## Purpose 2: dvt show (Local Development)
 
 **What:** Run model queries locally without hitting the warehouse.
 
@@ -38,7 +94,7 @@ dvt show --inline "SELECT COUNT(*) FROM {{ source('crm', 'customers') }}"
 dvt show --select fct_orders --output csv > orders.csv
 ```
 
-## Purpose 2: Local File and API Processing
+## Purpose 3: Local File and API Processing
 
 **What:** Process local files (CSV, Parquet, JSON) and APIs as sources.
 
@@ -63,7 +119,7 @@ This is useful when:
 extracted to the target via Sling. DuckDB is only used for `dvt show`
 and local development.
 
-## Purpose 3: Virtual Federation (Future)
+## Purpose 4: Virtual Federation (Future)
 
 **What:** Ephemeral cross-source queries without materializing to the target.
 
@@ -80,7 +136,7 @@ This is the Denodo-style pattern: data stays in place, query goes to the data.
 - Ad-hoc exploration across multiple databases
 - Small-volume cross-source queries where extraction overhead isn't worth it
 
-**This is NOT a P0/P1 feature.** It's a future enhancement (P4).
+**This is a future enhancement (P4).** Not part of the initial release.
 
 ## DuckDB Extensions
 
@@ -103,7 +159,7 @@ Extensions are installed to DuckDB's extension directory (usually `~/.duckdb/ext
 
 ## SQLGlot Role
 
-SQLGlot is used ONLY in the context of DuckDB:
+SQLGlot is used ONLY for `dvt show` transpilation:
 
 1. **dvt show transpilation** — when model SQL is in a target dialect (Snowflake, BigQuery,
    Redshift, etc.) and needs to run locally in DuckDB, SQLGlot transpiles it.
@@ -111,8 +167,10 @@ SQLGlot is used ONLY in the context of DuckDB:
 2. **Extraction query generation** (future, P4) — when the federation optimizer
    generates source-side queries, SQLGlot ensures they're valid for the source's dialect.
 
-SQLGlot is NOT used in the core `dvt run` pipeline. Model SQL is written in the
-target's dialect and pushed down unchanged via the dbt adapter.
+SQLGlot is **NOT** used for extraction models in `dvt run`. Extraction models are
+written in DuckDB SQL by the user — no transpilation needed. For Sling Direct
+(single source), the SQL is universal enough to run on the source. For DuckDB Compute
+(multi-source), DuckDB executes the SQL natively.
 
 ## Configuration
 
@@ -122,10 +180,15 @@ DuckDB configuration in dbt_project.yml (optional):
 # dbt_project.yml
 dvt:
   duckdb:
-    memory_limit: "4GB"          # max memory for dvt show
+    memory_limit: "4GB"          # max memory for dvt show AND multi-source extraction
     threads: 4                   # parallel threads
-    temp_directory: "/tmp/dvt"   # spill directory
+    temp_directory: "/tmp/dvt"   # spill directory for large datasets
 ```
+
+**Note on memory for multi-source extraction:** When DuckDB Compute processes
+multiple remote sources, all source data is loaded into memory. For large datasets,
+increase `memory_limit` and configure `temp_directory` for spill-to-disk. Monitor
+DuckDB memory usage during extraction runs.
 
 ## Dependencies
 

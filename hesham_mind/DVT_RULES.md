@@ -1,6 +1,6 @@
 # DVT Rules & Specifications
 
-> **Document Version:** 5.0  
+> **Document Version:** 6.0  
 > **Last Updated:** March 2026  
 > **Status:** Authoritative Reference
 
@@ -27,9 +27,18 @@ This document defines the complete ruleset for DVT (Data Virtualization Tool) be
 
 ## 1. Core Principles
 
-### 1.1 Transparent Data Movement
+### 1.1 Three Execution Paths
 
-DVT is **seamless to the dbt user**. The user writes standard dbt models and sources. DVT automatically detects when data movement is needed and uses Sling transparently.
+DVT automatically determines how to execute each model based on where its sources live relative to its target. The user writes standard dbt models — DVT handles the rest.
+
+**Path 1 — Default Pushdown:** All sources on the default target → standard dbt. No Sling, no DuckDB. User writes in target dialect.
+
+**Path 2 — Non-Default Pushdown:** Model targets a non-default adapter (e.g., `config(target='mysql_prod')`) but ALL its sources are on that same non-default target. Pure pushdown via the non-default adapter. User writes in that target's dialect.
+
+**Path 3 — Extraction (cross-engine):** Model references source(s) whose `connection` != model's target. DVT detects this automatically. User writes in **DuckDB SQL** for all extraction models. Two sub-paths (DVT chooses automatically, invisible to user):
+
+- **Sub-Path 3a — Sling Direct:** Model references exactly ONE remote `source()` or `ref()`. Sling streams directly from source → target model table. Supports incremental. No DuckDB involved.
+- **Sub-Path 3b — DuckDB Compute:** Model references 2+ remote `source()` and/or `ref()`. Sling streams each source → DuckDB (in-memory). Model SQL runs in DuckDB. Sling streams result from DuckDB → target model table. Table materialization only (no incremental).
 
 ```
 User writes:
@@ -37,13 +46,17 @@ User writes:
   Model target: prod_snowflake        ← from profiles.yml default
 
 DVT detects:
-  source_postgres != prod_snowflake → Sling moves data automatically
+  source_postgres != prod_snowflake → Extraction path
+  Single remote source → Sling Direct (sub-path 3a)
 
 User sees:
   Standard dbt run. No extra config needed.
+  Result lands directly as the model's named table on prod_snowflake.
 ```
 
 **RULE 1.1.1:** The user **NEVER** configures Sling directly. No `sling:` blocks in sources.yml, no `connection` config on models, no Sling YAML files. DVT handles all Sling orchestration internally based on the source's `connection` and the model's `target`.
+
+**RULE 1.1.2:** There are **no hidden staging tables.** No `_dvt` schema. Results land directly as the model's named table on the target.
 
 ### 1.2 Pushdown Preference
 
@@ -52,21 +65,32 @@ DVT **always prioritizes Adapter Pushdown** over data movement:
 ```
 IF source.connection == model.target THEN
     USE Adapter Pushdown (standard dbt — SQL execution on target database)
-ELSE
-    USE Sling (transparent data movement to target, then pushdown)
+ELSE IF single remote source/ref THEN
+    USE Sling Direct (stream source → target model table)
+ELSE (multiple remote sources/refs) THEN
+    USE DuckDB Compute (Sling → DuckDB → Sling → target model table)
 ```
 
-**Rationale:** Adapter pushdown is faster, requires no data movement, and maintains native database optimizations.
+**Rationale:** Adapter pushdown is fastest. Sling Direct is efficient for single-source extraction. DuckDB handles multi-source joins that can't be pushed down.
 
-### 1.3 Sling as the Data Movement Engine
+### 1.3 Data Movement Engines
 
-Sling handles **ALL** data movement in DVT:
-- Source extraction to model's target (when source connection != model target)
+DVT uses **two** engines for data movement and cross-engine compute:
+
+**Sling** handles all data streaming:
+- Source extraction to model's target (single-source extraction: Sling Direct)
+- Streaming sources into DuckDB (multi-source extraction)
+- Streaming results from DuckDB to target (multi-source extraction)
 - Cross-target ref resolution (when ref'd model's target != referencing model's target)
 - Seed loading (CSV-to-database bulk loading)
 - Cross-target model materialization (when model target != default target and target is a bucket)
 
-DVT does **NOT** use Spark, custom JDBC code, or any intermediate compute engine.
+**DuckDB** handles multi-source extraction compute:
+- When a model references 2+ remote sources/refs, DuckDB is the in-process compute engine
+- Sling streams each remote source into DuckDB, model SQL runs in DuckDB, Sling streams the result to the target
+- DuckDB is also used for `dvt show` (local ad-hoc queries)
+
+DVT does **NOT** use Spark, custom JDBC code, or PySpark.
 
 ### 1.4 User Experience is dbt
 
@@ -76,16 +100,28 @@ The user writes:
 - `models/*.sql` — standard dbt SQL with `{{ source() }}`, `{{ ref() }}`, `{{ config() }}`
 - `seeds/*.csv` — standard CSV seed files
 
-**That's it.** No Sling config, no extraction models, no connection config on models, no staging layer to manage. DVT figures out the rest.
+**That's it.** No Sling config, no extraction models, no connection config on models, no hidden staging tables. DVT figures out the rest.
 
-### 1.5 DuckDB is Scoped
+**Dialect rule for extraction models:** All models with remote sources (extraction path) must be written in **DuckDB SQL**. For single-source models, the SQL is universal enough (`SELECT * FROM ...`) that Sling executes it directly on the source. For multi-source models, DuckDB executes the SQL.
 
-DuckDB is **NOT** the core compute engine. It is used only for:
-- `dvt show` — local ad-hoc queries without hitting the warehouse
-- Local file/API processing — reading CSV/Parquet/JSON sources locally
-- Virtual federation (future) — ephemeral cross-source queries via ATTACH
+| Scenario | User Writes In | Runs On |
+|---|---|---|
+| All sources local (default pushdown) | Target dialect | Target DB via adapter |
+| All sources on non-default target | That target's dialect | That target DB via non-default adapter |
+| Single remote source (extraction) | DuckDB SQL | Source DB via Sling (SQL is universal enough) |
+| Multiple remote sources (extraction) | DuckDB SQL | DuckDB (in-process) |
 
-DuckDB is **never** used in the `dvt run` pipeline.
+### 1.5 DuckDB Role
+
+DuckDB serves two purposes in DVT:
+
+1. **Cross-engine compute for multi-source extraction** (`dvt run`) — when a model references 2+ remote sources, Sling streams each source into DuckDB, the model SQL executes in DuckDB, and Sling streams the result to the target. This is a P1 feature.
+
+2. **Local development** (`dvt show`) — run model queries locally without hitting the warehouse. SQLGlot transpiles target-dialect SQL to DuckDB SQL for local execution.
+
+3. **Local file/API processing** — reading CSV/Parquet/JSON sources locally.
+
+4. **Virtual federation (future)** — ephemeral cross-source queries via ATTACH.
 
 ---
 
@@ -211,99 +247,96 @@ It does **NOT** contain any extraction config, Sling config, or data movement co
 **RULE 3.2.1:** When a model references `{{ source('crm', 'customers') }}`:
 1. DVT looks up the source's `connection` in sources.yml → `source_postgres`
 2. DVT resolves the model's target → `prod_snowflake`
-3. Comparison:
+3. DVT counts how many remote sources/refs the model has
+4. Comparison:
    - If `source_postgres == prod_snowflake` → source is local. Resolve to `schema.table` on target. Standard dbt.
-   - If `source_postgres != prod_snowflake` → source is remote. DVT uses Sling to extract before model runs.
+   - If `source_postgres != prod_snowflake` → source is remote. DVT triggers extraction.
 
-**RULE 3.2.2:** For remote sources, DVT:
-1. Creates a temporary/staging table on the model's target
-2. Sling extracts the source table from `source_postgres` → target staging table
-3. `{{ source('crm', 'customers') }}` resolves to the staging table on the target
-4. Model SQL executes on the target via adapter pushdown, referencing the staging table
+**RULE 3.2.2:** For remote sources, DVT determines the extraction sub-path:
+- **Single remote source/ref → Sling Direct (sub-path 3a):** Sling streams data directly from the source to the model's named table on the target. No intermediate tables.
+- **Multiple remote sources/refs → DuckDB Compute (sub-path 3b):** Sling streams each remote source into DuckDB (in-memory). Model SQL runs in DuckDB. Sling streams the result to the model's named table on the target.
 
-### 3.3 Source SQL Dialect
+**RULE 3.2.3:** In both sub-paths, the result lands directly as the model's named table. There are no hidden staging tables, no `_dvt` schema, no intermediate copies on the target.
 
-**RULE 3.3.1:** When DVT extracts a source via Sling, the extraction query runs on the **source** database. For simple extractions (`SELECT * FROM schema.table`), no dialect concerns arise.
+### 3.3 Extraction Model SQL Dialect
 
-**RULE 3.3.2:** For incremental models that use `is_incremental()` with source-side WHERE clauses, DVT must format the watermark literal in the **source's dialect** (see Section 4.4).
+**RULE 3.3.1:** All extraction models (any model with at least one remote source) must be written in **DuckDB SQL** syntax. This is the user-facing rule.
+
+**RULE 3.3.2:** For single-source extraction (sub-path 3a), the SQL is typically a simple `SELECT * FROM ...` or `SELECT columns FROM ...` which is universal across dialects. Sling executes the extraction on the source database.
+
+**RULE 3.3.3:** For multi-source extraction (sub-path 3b), DuckDB executes the model SQL after all remote sources have been streamed into DuckDB.
+
+**RULE 3.3.4:** For incremental single-source models that use `is_incremental()` with source-side WHERE clauses, DVT must format the watermark literal in the **source's dialect** (see Section 4.4).
 
 ---
 
-## 4. Data Movement Rules (Sling)
+## 4. Data Movement Rules
 
-### 4.1 When Sling is Used
+### 4.1 When Data Movement is Triggered
 
-Sling is triggered automatically in these scenarios:
+Data movement is triggered automatically in these scenarios:
 
-| Scenario | Detection | Sling Action |
+| Scenario | Detection | Action |
 |---|---|---|
-| Source connection != model target | `source.connection != model.target` | Extract source table → model's target |
+| Single remote source/ref | `source.connection != model.target` (1 remote) | **Sling Direct:** stream source → model table on target |
+| Multiple remote sources/refs | `source.connection != model.target` (2+ remote) | **DuckDB Compute:** Sling → DuckDB → Sling → model table on target |
 | Ref'd model target != this model target | `ref_model.target != model.target` | Move ref'd result → this model's target |
 | Model target is a bucket | `model.target.type in (s3, gcs, azure)` | Move result from default target → bucket |
 | Seed loading | `dvt seed` command | Load CSV → target via bulk loading |
 
-**RULE 4.1.1:** Sling is NEVER triggered when all sources and refs are on the model's target. In that case, pure adapter pushdown is used (standard dbt behavior).
+**RULE 4.1.1:** Data movement is NEVER triggered when all sources and refs are on the model's target. In that case, pure adapter pushdown is used (standard dbt behavior).
 
-### 4.2 Extraction for Remote Sources
+### 4.2 Sub-Path 3a: Sling Direct (Single Remote Source)
 
-**RULE 4.2.1:** When a model references a source on a different connection:
+**Condition:** Model references exactly ONE remote `source()` or `ref()`.
+
+**RULE 4.2.1:** When a model references a single source on a different connection:
 1. DVT generates a Sling extraction task for that source table
 2. Sling executes `SELECT * FROM schema.table` on the source database
-3. Sling streams the result to the model's target database
-4. The data lands in a DVT-managed staging area on the target
-5. The model SQL runs on the target, referencing the staged data
-6. After the model completes, the staged data may be retained for subsequent runs (caching)
+3. Sling streams the result **directly** to the model's named table on the target
+4. No intermediate tables, no staging schema, no hidden copies
 
-**RULE 4.2.2:** For `table` materialized models (default, no `--full-refresh`):
-- Sling mode: `truncate` (truncate staging table, reload from source)
+**RULE 4.2.2:** For `table` materialized models:
+- Sling mode: `full-refresh` (create/replace the model's table on the target)
 
-**RULE 4.2.3:** For `table` materialized models with `--full-refresh`:
-- Sling mode: `full-refresh` (drop staging table, recreate, reload)
-
-**RULE 4.2.4:** For `incremental` materialized models:
+**RULE 4.2.3:** For `incremental` materialized models:
 - See Section 4.4 (Cross-Engine Incremental)
+- Sling handles watermark filtering + merge directly on the model's table
 
-### 4.3 Extraction Staging
+**RULE 4.2.4:** Sling Direct is efficient for large tables — streaming, low memory footprint.
 
-**RULE 4.3.1:** DVT manages a staging schema on the target for extracted source data.
+### 4.3 Sub-Path 3b: DuckDB Compute (Multiple Remote Sources)
 
-**RULE 4.3.2:** Staging table naming convention:
-```
-{dvt_staging_schema}.{source_name}__{table_name}
+**Condition:** Model references 2+ remote `source()` and/or `ref()`.
 
-Examples:
-  _dvt.crm__customers
-  _dvt.erp__invoices
-```
+**RULE 4.3.1:** When a model references multiple remote sources:
+1. For each remote source/ref, Sling streams data into DuckDB (in-memory)
+2. Model SQL executes in DuckDB (user wrote it in DuckDB SQL)
+3. Sling streams the result from DuckDB to the model's named table on the target
+4. No intermediate tables on the target, no staging schema
 
-**RULE 4.3.3:** The staging schema is configurable via `dvt.staging_schema` in `dbt_project.yml`. Default: `_dvt`.
+**RULE 4.3.2:** DuckDB Compute only supports `table` materialization:
+- `incremental` → DVT raises **compilation error** `"DVT112: Incremental materialization is not supported for models with multiple remote sources. Use table materialization instead."`
+- `view` → coerced to `table` (DVT001 warning)
+- `ephemeral` → not supported (DVT110 error)
 
-**RULE 4.3.4:** Staging tables are:
-- Created automatically by DVT (not by the user)
-- Visible in the target database (for debugging)
-- Managed by DVT (created, truncated, dropped as needed)
-- NOT visible in the DAG or lineage (they are implementation details, not user models)
+**RULE 4.3.3:** DuckDB is ephemeral — it starts in-process, loads sources, runs the model SQL, and shuts down. No persistent state.
 
-**RULE 4.3.5:** `{{ source() }}` references in model SQL resolve to the staging table when the source is remote:
-```sql
--- User writes:
-SELECT * FROM {{ source('crm', 'customers') }}
-
--- DVT resolves (when crm is remote):
-SELECT * FROM _dvt.crm__customers
-```
+**RULE 4.3.4:** The user writes DuckDB SQL for the model. DVT handles all Sling orchestration to load sources into DuckDB and stream the result to the target.
 
 ### 4.4 Cross-Engine Incremental Models
 
-**RULE 4.4.1:** When an `incremental` model references a remote source:
-1. DVT pre-resolves the watermark value from the **target** table
+**RULE 4.4.1:** Incremental materialization is **only supported for single-source extraction** (sub-path 3a — Sling Direct). Multi-source extraction (sub-path 3b — DuckDB) cannot be incremental (DVT112 error).
+
+**RULE 4.4.2:** When a single-source `incremental` model references a remote source:
+1. DVT pre-resolves the watermark value from the **target** model table
 2. DVT formats the watermark as a **dialect-specific literal** for the source engine
 3. DVT generates an extraction query with the watermark filter
 4. Sling executes the filtered query on the source (only delta rows)
-5. Sling merges the delta into the staging table on the target
-6. The model's incremental SQL runs on the target via adapter pushdown
+5. Sling merges the delta directly into the model's table on the target
+6. No staging tables involved — Sling operates directly on the model's named table
 
-**RULE 4.4.2:** dbt incremental strategy → Sling merge strategy mapping:
+**RULE 4.4.3:** dbt incremental strategy → Sling merge strategy mapping:
 
 | dbt Strategy | Sling Behavior |
 |---|---|
@@ -312,9 +345,9 @@ SELECT * FROM _dvt.crm__customers
 | `delete+insert` | Sling `incremental` mode with `merge_strategy: delete_insert` |
 | `insert_overwrite` | Sling partition overwrite via target_options |
 
-**RULE 4.4.3:** The model's `unique_key` maps to Sling's `primary_key` for the staging table merge.
+**RULE 4.4.4:** The model's `unique_key` maps to Sling's `primary_key` for the merge on the model's target table.
 
-**RULE 4.4.4:** Watermark resolution flow:
+**RULE 4.4.5:** Watermark resolution flow:
 ```
 1. Model SQL has: WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
 2. DVT queries target: SELECT MAX(updated_at) FROM target_schema.model_table
@@ -323,13 +356,12 @@ SELECT * FROM _dvt.crm__customers
 5. Generates extraction query:
    SELECT * FROM source_schema.orders
    WHERE updated_at > TO_TIMESTAMP('2024-03-14 12:00:00.000000', 'YYYY-MM-DD HH24:MI:SS.FF6')
-6. Sling executes on source, streams delta to staging table, merges
-7. Model incremental SQL runs on target (standard dbt incremental)
+6. Sling executes on source, streams delta directly to model table, merges
 ```
 
-**RULE 4.4.5:** On first run (target table doesn't exist): `is_incremental()` returns false. Full extraction, no watermark. Standard dbt behavior.
+**RULE 4.4.6:** On first run (target table doesn't exist): `is_incremental()` returns false. Full extraction, no watermark. Standard dbt behavior.
 
-**RULE 4.4.6:** On `--full-refresh`: `is_incremental()` returns false. Full extraction, full model rebuild. Standard dbt behavior.
+**RULE 4.4.7:** On `--full-refresh`: `is_incremental()` returns false. Full extraction, full model rebuild. Standard dbt behavior.
 
 ### 4.5 Dialect-Specific Watermark Formatting
 
@@ -394,33 +426,49 @@ SELECT * FROM _dvt.crm__customers
 
 This is **stock dbt behavior**. DVT delegates entirely to the dbt adapter.
 
-### 5.3 Cross-Target Execution (Sling + Pushdown)
+### 5.3 Extraction Execution (Cross-Engine)
 
 **Condition:** At least one source or ref is on a different connection/target
 
+**Sub-Path 3a: Sling Direct (single remote source/ref):**
+
 | Materialization | Behavior |
 |-----------------|----------|
-| `table` | Sling extracts remote sources → staging on target. Adapter runs SQL on target. |
-| `view` | Sling extracts remote sources → staging on target. Adapter creates view on target. |
-| `incremental` | Sling extracts delta → staging on target. Adapter runs incremental SQL on target. |
-| `ephemeral` | Sling extracts remote sources → staging on target. CTE injection on target. |
+| `table` | Sling streams source → model's named table on target |
+| `incremental` | Sling streams delta → merges into model's table on target (watermark-filtered) |
+| `view` | **Coerced to table** (DVT001 warning) |
+| `ephemeral` | **Not supported** (DVT110 error) |
 
-**Key point:** After Sling moves the data, ALL SQL execution is pushdown via the dbt adapter. The target database is always the compute engine.
+**Sub-Path 3b: DuckDB Compute (multiple remote sources/refs):**
 
-### 5.4 View on Cross-Target Sources
+| Materialization | Behavior |
+|-----------------|----------|
+| `table` | Sling → DuckDB (each source). DuckDB runs model SQL. Sling → model's table on target |
+| `incremental` | **Not supported** (DVT112 error) |
+| `view` | **Coerced to table** (DVT001 warning) |
+| `ephemeral` | **Not supported** (DVT110 error) |
 
-**RULE 5.4.1:** Views CAN be created when remote sources have been extracted to the target. The view references the staging tables on the target, not the remote databases.
+**Key points:**
+- No hidden staging tables. Results land directly as the model's named table.
+- For Sling Direct: Sling is the data movement engine, source DB is the compute engine.
+- For DuckDB Compute: Sling is the data movement engine, DuckDB is the compute engine.
 
-**RULE 5.4.2:** Exception: When a model's target is a **bucket**, views are coerced to tables:
+### 5.4 View on Extraction Models
+
+**RULE 5.4.1:** Views are NOT supported for extraction models (models with remote sources). Views are coerced to tables:
+- DVT emits warning: `"DVT001: Model '<name>' has remote sources and is materialized as view. Coercing to table."`
+
+**RULE 5.4.2:** When a model's target is a **bucket**, views are also coerced to tables:
 - DVT emits warning: `"DVT001: Model '<name>' targets a bucket but is materialized as view. Coercing to table."`
 
 ### 5.5 Ephemeral Models
 
-**RULE 5.5.1:** Ephemeral models are compiled as CTEs and injected into downstream queries. Standard dbt behavior.
+**RULE 5.5.1:** Ephemeral models with all local sources are compiled as CTEs and injected into downstream queries. Standard dbt behavior.
 
-**RULE 5.5.2:** If an ephemeral model references remote sources, those sources are extracted to the target BEFORE the downstream (non-ephemeral) model runs. The CTE SQL references the staging tables.
+**RULE 5.5.2:** Ephemeral models with remote sources are NOT supported:
+- DVT raises **compilation error**: `"DVT110: Ephemeral materialization is not supported for models with remote sources. Use table materialization instead."`
 
-**RULE 5.5.3:** If an ephemeral model is referenced by **multiple** downstream models:
+**RULE 5.5.3:** If an ephemeral model (all local sources) is referenced by **multiple** downstream models:
 - DVT emits a warning: `"DVT006: Ephemeral model '<name>' is referenced by multiple downstream models. Consider materializing it for performance."`
 
 ### 5.6 Snapshot Materialization
@@ -444,13 +492,13 @@ This is **stock dbt behavior**. DVT delegates entirely to the dbt adapter.
 
 ### 5.8 Materialization Summary
 
-| Materialization | All Local | Remote Sources | Bucket Target |
-|-----------------|-----------|----------------|---------------|
-| table | Adapter SQL | Sling extract → Adapter SQL | Adapter SQL → Sling to bucket |
-| view | Adapter SQL | Sling extract → Adapter SQL (view) | **Coerced to table** (DVT001) |
-| incremental | Adapter SQL | Sling incr extract → Adapter incr SQL | Adapter SQL → Sling to bucket |
-| ephemeral | CTE injection | Sling extract → CTE injection | CTE (no bucket write) |
-| snapshot | Adapter SQL | Sling extract → Adapter snapshot | Not applicable |
+| Materialization | All Local | Single Remote Source (Sling Direct) | Multiple Remote Sources (DuckDB) | Bucket Target |
+|-----------------|-----------|-------------------------------------|----------------------------------|---------------|
+| table | Adapter SQL | Sling → model table | Sling → DuckDB → Sling → model table | Adapter SQL → Sling to bucket |
+| view | Adapter SQL | **Coerced to table** (DVT001) | **Coerced to table** (DVT001) | **Coerced to table** (DVT001) |
+| incremental | Adapter SQL | Sling incremental → model table | **Not supported** (DVT112) | Adapter SQL → Sling to bucket |
+| ephemeral | CTE injection | **Not supported** (DVT110) | **Not supported** (DVT110) | CTE (no bucket write) |
+| snapshot | Adapter SQL | Sling → model table, then snapshot | Not supported | Not applicable |
 
 ---
 
@@ -485,14 +533,26 @@ Example DAG:
 sources.yml: crm (connection: pg), erp (connection: mssql)
 Model target: snowflake (default)
 
-1. Sling extracts crm.customers (pg → sf._dvt.crm__customers)
-2. Sling extracts crm.orders (pg → sf._dvt.crm__orders)
-3. Sling extracts erp.invoices (mssql → sf._dvt.erp__invoices)
-   (steps 1-3 can run in parallel)
-4. Adapter runs stg_customers SQL on snowflake (pushdown)
-5. Adapter runs stg_orders SQL on snowflake (pushdown)
-6. Adapter runs dim_customers SQL on snowflake (pushdown)
-7. Tests run on snowflake
+stg_customers (single remote source: crm.customers):
+  → Sling Direct: pg.customers → sf.stg_customers (model table directly)
+
+stg_orders (single remote source: crm.orders, incremental):
+  → Sling Direct: pg.orders → sf.stg_orders (with watermark filter, merge)
+
+stg_invoices (single remote source: erp.invoices):
+  → Sling Direct: mssql.invoices → sf.stg_invoices (model table directly)
+
+(above three can run in parallel)
+
+combined_report (multiple remote sources: crm.customers + erp.products):
+  → DuckDB Compute: Sling streams pg.customers + mssql.products → DuckDB
+  → DuckDB runs model SQL (join)
+  → Sling streams result → sf.combined_report
+
+dim_customers (all local — refs stg_customers, stg_orders):
+  → Pushdown: Snowflake runs SQL (standard dbt)
+
+Tests run on snowflake.
 ```
 
 **RULE 6.2.2:** Extractions for the same model **MAY** run in parallel.
@@ -653,7 +713,7 @@ If no extraction needed → DVT works without Sling.
 | Hooks | Identical | Target adapter (pre/post) |
 | Macros | Identical | Identical |
 | Packages | Identical | Identical |
-| Incremental | Identical | Sling extraction (dialect-aware watermarks) + adapter merge |
+| Incremental | Identical | Single-source: Sling Direct (dialect-aware watermarks). Multi-source: not supported. |
 
 ---
 
@@ -681,6 +741,8 @@ If no extraction needed → DVT works without Sling.
 | DVT106 | Sling not found | Sling binary missing when extraction needed |
 | DVT108 | Unknown materialization | Invalid materialization type |
 | DVT109 | Watermark format error | Cannot format watermark for source dialect |
+| DVT110 | Ephemeral with remote sources | Ephemeral materialization not supported for models with remote sources |
+| DVT112 | Incremental multi-source | Incremental materialization not supported for models with multiple remote sources |
 
 ---
 
@@ -745,19 +807,23 @@ sources:
       - name: products
 ```
 
-### Models (standard dbt — no DVT-specific config needed)
+### Models
 
 ```sql
 -- models/staging/stg_customers.sql
+-- EXTRACTION MODEL: Single remote source → Sling Direct (sub-path 3a)
+-- Written in DuckDB SQL (universal enough for Sling to execute on source)
 -- DVT detects: source crm is on source_postgres, model target is prod_snowflake
--- DVT automatically extracts via Sling. User writes nothing special.
+-- Result lands directly as stg_customers table on prod_snowflake
 {{ config(materialized='table') }}
 SELECT * FROM {{ source('crm', 'customers') }}
 ```
 
 ```sql
 -- models/staging/stg_orders.sql
--- Incremental works across engines. DVT handles watermark formatting.
+-- EXTRACTION MODEL: Single remote source, incremental → Sling Direct (sub-path 3a)
+-- Written in DuckDB SQL. DVT handles watermark formatting for source dialect.
+-- Sling merges delta directly into stg_orders table on target.
 {{ config(materialized='incremental', unique_key='id') }}
 SELECT * FROM {{ source('crm', 'orders') }}
 {% if is_incremental() %}
@@ -766,8 +832,20 @@ WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
 ```
 
 ```sql
+-- models/staging/stg_combined.sql
+-- EXTRACTION MODEL: Multiple remote sources → DuckDB Compute (sub-path 3b)
+-- Written in DuckDB SQL. DuckDB executes the join.
+-- Sling streams each source into DuckDB, runs SQL, streams result to target.
+-- NOTE: Must be 'table' materialization (incremental not supported for multi-source)
+{{ config(materialized='table') }}
+SELECT c.id, c.name, i.invoice_total
+FROM {{ source('crm', 'customers') }} c
+JOIN {{ source('erp', 'invoices') }} i ON c.id = i.customer_id
+```
+
+```sql
 -- models/marts/dim_customers.sql
--- Pure pushdown on target. All sources are already on snowflake (extracted above).
+-- PUSHDOWN MODEL: All refs are on target. Standard dbt. Written in target dialect.
 {{ config(materialized='table') }}
 SELECT c.*, COUNT(o.id) as order_count
 FROM {{ ref('stg_customers') }} c
@@ -793,9 +871,8 @@ model-paths: ["models"]
 seed-paths: ["seeds"]
 test-paths: ["tests"]
 
-# DVT-specific config (optional)
-dvt:
-  staging_schema: _dvt               # schema for extracted source data (default: _dvt)
+# No dvt.staging_schema needed — DVT does not create hidden staging tables.
+# Results land directly as model tables.
 ```
 
 ---
@@ -804,23 +881,26 @@ dvt:
 
 | Topic | Decision |
 |-------|----------|
-| Data movement trigger | Automatic. source.connection != model.target → Sling. |
+| Data movement trigger | Automatic. source.connection != model.target → extraction path. |
+| Single remote source | **Sling Direct** — stream source → model table. Supports incremental. |
+| Multiple remote sources | **DuckDB Compute** — Sling → DuckDB → Sling → model table. Table materialization only. |
 | User Sling configuration | **NONE.** User never configures Sling. DVT handles it. |
 | Model connection config | **NONE.** No `connection` on models. Only on sources. |
 | Extraction config on sources | **NONE.** No `sling:` blocks. sources.yml is metadata only. |
-| Staging schema | `_dvt` by default. Managed by DVT. Not visible in DAG. |
-| Cross-engine incremental | DVT pre-resolves watermark, formats in source dialect, Sling extracts delta. |
+| Hidden staging tables | **NONE.** No `_dvt` schema. Results land directly as model tables. |
+| Extraction model SQL dialect | **DuckDB SQL.** All models with remote sources are written in DuckDB SQL. |
+| Cross-engine incremental | Only for single-source (Sling Direct). DVT pre-resolves watermark, Sling extracts delta. |
+| Multi-source incremental | **NOT supported.** DVT112 error. Use table materialization. |
 | Watermark formatting | Dialect-specific literals (Oracle: TO_TIMESTAMP, SQL Server: CONVERT, etc.) |
 | Type mapping | Sling general type system. DVT002 warning for exotic types. |
-| Incremental merge | Sling handles staging merge. Adapter handles model merge. |
 | Cross-target refs | DVT detects, Sling moves result. Transparent to user. |
-| Ephemeral with remote sources | Supported. Remote sources extracted before downstream model runs. |
-| Snapshots with remote sources | Supported. Sources extracted, then snapshot runs on target. |
+| Ephemeral with remote sources | **NOT supported.** DVT110 error. Use table materialization. |
+| Snapshots with remote sources | Supported via Sling Direct (single source). |
 | Failed extraction | Error model + skip downstream. Incremental safe (watermark not committed). |
 | Parallel execution | --threads. Extractions for same model can parallelize. |
 | Table write mode | Truncate+Insert default. Drop+Create on --full-refresh. |
 | Seed loading | Sling bulk load. --full-refresh drops. --target redirects. |
-| DuckDB | dvt show, local files, virtual federation (future). NOT dvt run. |
+| DuckDB | dvt show + multi-source extraction compute + local files + virtual federation (future). |
 | Bucket targets | First-class. Delta default. Configurable format. |
 | Sling not installed | Error only if extraction needed. Optional otherwise. |
 
