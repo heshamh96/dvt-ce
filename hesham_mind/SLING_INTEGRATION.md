@@ -46,38 +46,82 @@ MinIO, Cloudflare R2, Wasabi, SFTP
 
 ## How DVT Uses Sling
 
-### 1. Automatic Source Extraction
+### 1. Sling Direct — Single Remote Source Extraction
 
-When `dvt run` detects that a model references sources whose `connection` (from sources.yml)
-differs from the model's `target` (from profiles.yml default or model config), DVT
-automatically extracts those source tables to the `_dvt` staging schema on the target.
+When `dvt run` detects that a model references exactly ONE source whose `connection`
+differs from the model's `target`, DVT uses **Sling Direct**: Sling streams data
+directly from the source to the model's named table on the target.
 
-The user writes standard dbt models — no `connection` config, no `sling` config.
-DVT generates the Sling extraction calls internally:
+No hidden staging tables. No `_dvt` schema. Result lands directly as the model's table.
 
 ```python
 from sling import Replication, ReplicationStream
 
-# DVT auto-generates this for each remote source table referenced by the model
-# The user never sees or configures this directly
+# DVT auto-generates this — the user never sees or configures it
+replication = Replication(
+    source=source_connection_url,       # from source's connection in sources.yml
+    target=target_connection_url,       # model's target from profiles.yml
+    streams={
+        f"{source_schema}.{source_table}": ReplicationStream(
+            object=f"{target_schema}.{model_name}",  # model's named table directly
+            mode="full-refresh",                       # for table materialization
+        ),
+    },
+)
+replication.run()
+```
+
+For `incremental` models, Sling uses incremental mode with watermark filtering
+and merges delta directly into the model's table (see watermark section below).
+
+### 2. DuckDB Compute — Multiple Remote Source Extraction
+
+When a model references 2+ remote sources, DVT uses **DuckDB Compute**:
+
+1. Sling streams each remote source into DuckDB (in-memory)
+2. Model SQL executes in DuckDB (user wrote DuckDB SQL)
+3. Sling streams the result from DuckDB to the model's named table on the target
+
+```python
+import duckdb
+
+# Step 1: Sling streams each remote source into DuckDB
+duckdb_conn = duckdb.connect()  # ephemeral in-memory
 for source_table in remote_source_tables:
     replication = Replication(
-        source=source_connection_url,       # from source's connection in sources.yml
-        target=target_connection_url,       # model's target from profiles.yml
+        source=source_connection_url,
+        target="duckdb://",                 # in-memory DuckDB
         streams={
             f"{source_schema}.{source_table}": ReplicationStream(
-                object=f"_dvt.{source_name}__{table_name}",  # staging table
-                mode="full-refresh",                          # staging always full-refresh
+                object=f"{source_name}__{table_name}",  # DuckDB table name
+                mode="full-refresh",
             ),
         },
     )
     replication.run()
+
+# Step 2: Execute model SQL in DuckDB
+result = duckdb_conn.execute(compiled_model_sql)
+
+# Step 3: Sling streams result from DuckDB to target
+replication = Replication(
+    source="duckdb://",
+    target=target_connection_url,
+    streams={
+        "duckdb_result_table": ReplicationStream(
+            object=f"{target_schema}.{model_name}",  # model's named table
+            mode="full-refresh",
+        ),
+    },
+)
+replication.run()
+duckdb_conn.close()
 ```
 
-Staging tables (`_dvt.{source_name}__{table_name}`) are NOT visible in the DAG or lineage.
-They are implementation details managed entirely by DVT.
+DuckDB Compute only supports `table` materialization. Incremental is not supported
+for multi-source extraction (DVT112 error).
 
-### 2. Seed Loading
+### 3. Seed Loading
 
 When `dvt seed` is called:
 
@@ -103,7 +147,7 @@ replication.run()
 - Better type inference
 - Handles encoding issues (Latin-1, Windows-1252, etc.)
 
-### 3. Cross-Target Loading
+### 4. Cross-Target Loading
 
 When a model has `config(target='other_db')`:
 
@@ -123,7 +167,7 @@ replication = Replication(
 replication.run()
 ```
 
-### 4. Bucket Materialization
+### 5. Bucket Materialization
 
 When a model has `config(target='s3_bucket', format='delta')`:
 
@@ -177,24 +221,28 @@ This mapping lives in `core/dvt/extraction/connection_mapper.py`. It handles:
 
 DVT maps dbt model materializations to Sling modes for extraction models:
 
-### table → Sling full-refresh (staging extraction)
+### table → Sling full-refresh (direct to model table)
 
-When a `table` model references remote sources, DVT extracts source tables to `_dvt` staging
-via Sling full-refresh, then runs the model SQL on the target.
+**Sling Direct (single source):** Sling streams source data directly to the model's
+named table on the target using `full-refresh` mode.
 
-### incremental → Sling extraction with watermark filtering
+**DuckDB Compute (multi-source):** Sling streams each source into DuckDB, model SQL
+runs in DuckDB, then Sling streams the result to the model's table on the target.
 
-When an `incremental` model references remote sources, DVT:
-- Pre-resolves the watermark from the target in dialect-specific format
-- Filters the Sling extraction query to only pull delta rows into staging
-- Runs the model SQL on the target with incremental logic against staged data
-- `unique_key` is used by the dbt adapter for merge on the target (standard dbt behavior)
+### incremental → Sling extraction with watermark filtering (single source only)
+
+Only supported for **Sling Direct** (single remote source). DVT:
+- Pre-resolves the watermark from the model's target table in dialect-specific format
+- Filters the Sling extraction query to only pull delta rows
+- Sling merges delta directly into the model's named table on the target
+- `unique_key` maps to Sling's `primary_key` for the merge
+
+Multi-source incremental is not supported (DVT112 error).
 
 ### --full-refresh
 
 - `is_incremental()` returns false → no watermark filter
-- Sling re-extracts full source tables to `_dvt` staging
-- Model runs full SQL on target
+- Sling re-extracts full source table → model table on target
 - Matches stock dbt `--full-refresh` behavior exactly
 
 ## Dialect-Specific Watermark Formatting

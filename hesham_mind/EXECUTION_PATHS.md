@@ -2,20 +2,40 @@
 
 ## Overview
 
-Every model in the DVT DAG follows one of four execution paths, determined by
-whether its sources are remote and its `target` config. Seeds and tests have their own fixed paths.
+Every model in the DVT DAG follows one of three execution paths, with the extraction
+path having two sub-paths. DVT determines the path automatically based on where
+the model's sources live relative to its target. Seeds and tests have their own fixed paths.
 
-## Path 1: Automatic Extraction (Remote Source Detection → Sling)
+### Three Execution Paths
 
-**When:** A model references sources whose `connection` (from sources.yml) differs from the model's target (from profiles.yml default or model config).
+| Path | Condition | Engine |
+|------|-----------|--------|
+| **Default Pushdown** | All sources on default target | Target DB via adapter |
+| **Non-Default Pushdown** | All sources on non-default target (same as model target) | Non-default target DB via adapter |
+| **Extraction** | Source(s) on different connection than model target | Sling Direct or DuckDB Compute |
+
+### Two Extraction Sub-Paths
+
+| Sub-Path | Condition | How It Works |
+|----------|-----------|-------------|
+| **Sling Direct (3a)** | Exactly 1 remote source/ref | Sling streams source → model table on target |
+| **DuckDB Compute (3b)** | 2+ remote sources/refs | Sling → DuckDB → model SQL → Sling → model table on target |
+
+## Path 1: Extraction
+
+**When:** A model references source(s) whose `connection` (from sources.yml) differs from the model's target (from profiles.yml default or model config).
+
+**User-facing rule:** All extraction models must be written in **DuckDB SQL** syntax.
+
+### Sub-Path 3a: Sling Direct (Single Remote Source)
+
+**Condition:** Model references exactly ONE remote `source()` or `ref()`.
 
 **What happens:**
-1. DVT detects that one or more `source()` references point to a remote connection
-2. For each remote source table, DVT extracts data via Sling into the `_dvt` staging schema on the target (`_dvt.{source_name}__{table_name}`)
-3. These staging tables are NOT visible in the DAG or lineage — they are implementation details
-4. DVT compiles the model SQL, rewriting `{{ source() }}` refs to point to `_dvt` staging tables
-5. The model SQL runs on the target via the dbt adapter (standard pushdown)
-6. For incremental models: DVT pre-resolves watermarks from the target with dialect-specific formatting
+1. DVT detects that the single `source()` or `ref()` is on a remote connection
+2. Sling streams data directly from the source to the model's named table on the target
+3. No intermediate tables, no DuckDB, no staging schema
+4. Result lands directly as the model's table (e.g., `stg_orders`)
 
 **Sling call (generated internally by DVT):**
 ```python
@@ -24,13 +44,13 @@ sling.run(
     src_conn=source_connection_url,          # from source's `connection` in sources.yml
     src_stream=f"SELECT * FROM {source_schema}.{source_table}",  # auto-generated
     tgt_conn=target_connection_url,          # model's target from profiles.yml
-    tgt_object=f"_dvt.{source_name}__{table_name}",  # staging table
-    mode="full-refresh",                     # staging is always full-refresh
+    tgt_object=f"{target_schema}.{model_name}",  # model's named table directly
+    mode="full-refresh",                     # for table materialization
 )
 ```
 
-**Incremental watermark resolution:**
-For models with `is_incremental()` that reference remote sources:
+**Supports incremental:**
+For `incremental` models with a single remote source:
 ```
 1. DVT queries target: SELECT MAX(updated_at) FROM target_schema.stg_orders
 2. Gets raw value: datetime(2024, 3, 14, 12, 0, 0)
@@ -38,8 +58,8 @@ For models with `is_incremental()` that reference remote sources:
    - PostgreSQL: '2024-03-14 12:00:00.000000'::TIMESTAMP
    - Oracle:     TO_TIMESTAMP('2024-03-14 12:00:00.000000', 'YYYY-MM-DD HH24:MI:SS.FF6')
    - SQL Server: CONVERT(DATETIME2, '2024-03-14 12:00:00.000000', 121)
-4. Uses watermark to filter the Sling extraction query for the staging table
-5. Model SQL runs on target with incremental logic against staged data
+4. Sling extraction query filtered by watermark
+5. Sling merges delta directly into model's table on target
 ```
 
 **Incremental strategy mapping:**
@@ -51,17 +71,25 @@ For models with `is_incremental()` that reference remote sources:
 | `delete+insert` | Sling `incremental` mode with `merge_strategy: delete_insert` |
 | `insert_overwrite` | Sling partition overwrite via target_options |
 
+**Materialization constraints (Sling Direct):**
+
+| Materialization | Supported? |
+|---|---|
+| `table` | Yes |
+| `incremental` | **Yes** (Sling handles watermark + merge) |
+| `view` | Coerced to table (DVT001 warning) |
+| `ephemeral` | Not supported (DVT110 error) |
+
 **`--full-refresh` behavior:**
 - `is_incremental()` returns false → no watermark filter
-- Sling re-extracts full source tables to `_dvt` staging
-- Model runs full SQL on target
+- Sling re-extracts full source table → model table on target
+- Standard dbt behavior
 
-**Example model referencing a remote source:**
+**Example model (single remote source, incremental):**
 ```sql
 -- models/staging/stg_orders.sql
--- This is a STANDARD dbt model. No connection config. No sling config.
--- DVT detects that source('crm', 'orders') is on source_postgres (remote)
--- and automatically extracts it to _dvt.crm__orders before running this SQL.
+-- EXTRACTION MODEL: single remote source → Sling Direct
+-- Written in DuckDB SQL (universal enough for Sling to execute on source)
 {{ config(
     materialized='incremental',
     unique_key='id'
@@ -73,22 +101,91 @@ WHERE updated_at > (SELECT MAX(updated_at) FROM {{ this }})
 {% endif %}
 ```
 
+### Sub-Path 3b: DuckDB Compute (Multiple Remote Sources)
+
+**Condition:** Model references 2+ remote `source()` and/or `ref()`.
+
+**What happens:**
+1. DVT detects that multiple sources/refs are on remote connections
+2. For each remote source, Sling streams data into DuckDB (in-memory)
+3. Model SQL executes in DuckDB (user wrote it in DuckDB SQL)
+4. Sling streams the result from DuckDB to the model's named table on the target
+5. DuckDB instance is destroyed (ephemeral)
+6. No intermediate tables on the target
+
+**Flow:**
+```
+Source A (Postgres)     Source B (SQL Server)
+    │                       │
+    │ Sling                 │ Sling
+    ▼                       ▼
+┌────────────────────────────────┐
+│         DuckDB (in-memory)     │
+│                                │
+│  Model SQL runs here           │
+│  (user wrote DuckDB SQL)       │
+│                                │
+│  Result: joined/transformed    │
+└────────────────────────────────┘
+                │
+                │ Sling
+                ▼
+┌────────────────────────────────┐
+│    Target (e.g., Snowflake)    │
+│    model's named table         │
+└────────────────────────────────┘
+```
+
+**Materialization constraints (DuckDB Compute):**
+
+| Materialization | Supported? |
+|---|---|
+| `table` | Yes |
+| `incremental` | **No** — DVT112 error |
+| `view` | Coerced to table (DVT001 warning) |
+| `ephemeral` | Not supported (DVT110 error) |
+
+**Example model (multiple remote sources):**
+```sql
+-- models/staging/stg_combined.sql
+-- EXTRACTION MODEL: multiple remote sources → DuckDB Compute
+-- Written in DuckDB SQL (DuckDB is the compute engine)
+-- Must use table materialization (incremental not supported)
+{{ config(materialized='table') }}
+SELECT c.id, c.name, c.email, i.invoice_total, i.invoice_date
+FROM {{ source('crm', 'customers') }} c
+JOIN {{ source('erp', 'invoices') }} i ON c.id = i.customer_id
+WHERE i.invoice_date >= '2024-01-01'
+```
+
 **DvtModelRunner logic:**
 ```python
 class DvtModelRunner(ModelRunner):
     def execute(self, model, manifest):
-        # Check if any source references are on a different connection than model's target
-        remote_sources = self.detect_remote_sources(model, manifest)
-        if remote_sources:
-            self.extract_sources_to_staging(remote_sources)  # Sling → _dvt schema
+        model_target = model.config.get("target", self.default_target)
 
-        if model.config.get("target") != self.default_target:
-            return self.execute_cross_target(model, manifest)
+        # Count remote sources/refs
+        remote_sources = self.detect_remote_sources(model, manifest)
+
+        if not remote_sources:
+            # Path 1/2: Pushdown — all sources local
+            if model_target != self.default_target:
+                return self.execute_cross_target(model, manifest)
+            else:
+                return super().execute(model, manifest)  # standard dbt pushdown
+
+        elif len(remote_sources) == 1:
+            # Sub-path 3a: Sling Direct — single remote source
+            return self.execute_sling_direct(model, manifest, remote_sources[0])
+
         else:
-            return super().execute(model, manifest)  # standard dbt pushdown
+            # Sub-path 3b: DuckDB Compute — multiple remote sources
+            if model.config.get("materialized") == "incremental":
+                raise DVT112Error(model.name)
+            return self.execute_duckdb_compute(model, manifest, remote_sources)
 
     def detect_remote_sources(self, model, manifest):
-        """For each source() ref in model, check if source.connection != model.target"""
+        """For each source()/ref() in model, check if connection != model.target"""
         model_target = model.config.get("target", self.default_target)
         remote = []
         for source_ref in model.source_references:
@@ -98,9 +195,11 @@ class DvtModelRunner(ModelRunner):
         return remote
 ```
 
-## Path 2: Pushdown (Model SQL → Target via dbt Adapter)
+## Path 2: Pushdown (Default & Non-Default)
 
-**When:** A model's sources are all on the same connection as its target (no remote sources), and its target is the default target.
+### Default Pushdown
+
+**When:** A model's sources are all on the same connection as its target, and its target is the default target.
 
 **What happens:**
 1. dbt compiles the model (Jinja → SQL)
@@ -108,12 +207,22 @@ class DvtModelRunner(ModelRunner):
 3. The dbt adapter executes the SQL on the target database
 4. Materialization is handled by the adapter's macros (CREATE TABLE AS, MERGE INTO, etc.)
 
-**This is stock dbt behavior.** No Sling, no DuckDB. DvtModelRunner delegates to
-the parent ModelRunner.
+**This is stock dbt behavior.** No Sling, no DuckDB. User writes in target dialect.
+
+### Non-Default Pushdown
+
+**When:** Model targets a non-default adapter (e.g., `config(target='mysql_prod')`) but ALL its sources are on that same non-default target.
+
+**What happens:**
+1. DVT uses the non-default adapter instead of the global default
+2. Pure pushdown — SQL runs on the non-default target
+3. No Sling, no DuckDB
+4. User writes in that target's dialect
 
 **Example:**
 ```sql
--- models/marts/dim_customers.sql (all sources on target — standard pushdown)
+-- models/marts/dim_customers.sql (all refs on target — standard pushdown)
+-- Written in target dialect (e.g., Snowflake SQL)
 {{ config(materialized='table') }}
 SELECT
     c.id, c.name, c.email,
@@ -218,28 +327,34 @@ def resolve_execution_path(node, manifest, config):
     if node.resource_type == "model":
         model_target = node.config.get("target", config.default_target)
 
-        # Check if any source references are on a remote connection
-        has_remote_sources = any(
-            manifest.sources[src].connection != model_target
-            for src in node.source_references
-        )
-        if has_remote_sources:
-            return "extraction"  # DVT auto-extracts remote sources to _dvt staging
+        # Count remote source references
+        remote_sources = [
+            src for src in node.source_references
+            if manifest.sources[src].connection != model_target
+        ]
 
-        # Cross-target: model target differs from default
+        if remote_sources:
+            if len(remote_sources) == 1:
+                return "extraction_sling_direct"   # Sub-path 3a
+            else:
+                return "extraction_duckdb_compute"  # Sub-path 3b
+
+        # Cross-target: model target differs from default (but all sources local)
         if model_target != config.default_target:
-            return "cross_target"
+            return "pushdown_non_default"  # Non-default pushdown
 
         # Default: pushdown via adapter
-        return "pushdown"
+        return "pushdown_default"
 ```
 
 ## Summary Table
 
 | Path | Trigger | Data Movement | Compute Engine | Sling | DuckDB |
 |------|---------|---------------|----------------|-------|--------|
-| Extraction | source.connection != model.target | source → _dvt staging → target | Sling (extract) + Target DB (model SQL) | YES | no |
-| Pushdown | all sources on target, target == default | none | Target DB (adapter) | no | no |
-| Cross-target | target != default | target → other target/bucket | Target DB (adapter) + Sling (move) | YES | no |
+| Default Pushdown | all sources on default target | none | Target DB (adapter) | no | no |
+| Non-Default Pushdown | all sources on non-default target | none | Non-default target DB (adapter) | no | no |
+| Sling Direct (3a) | 1 remote source/ref | source → model table on target | Sling (stream) | YES | no |
+| DuckDB Compute (3b) | 2+ remote sources/refs | sources → DuckDB → model table on target | DuckDB (in-process) + Sling (stream) | YES | YES |
+| Cross-target output | target is bucket or other DB | result → other target/bucket | Target DB (adapter) + Sling (move) | YES | no |
 | Local query | `dvt show` | streamed to memory | DuckDB | no | YES |
 | Seed loading | `dvt seed` | CSV → target | Sling (bulk load) | YES | no |
