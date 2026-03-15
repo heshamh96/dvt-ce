@@ -15,7 +15,10 @@ try:
 except ImportError:
     # the user has a downlevel version of setuptools.
     print("Error: dbt requires setuptools v40.1.0 or higher.")
-    print('Please upgrade setuptools with "pip install --upgrade setuptools" ' "and try again")
+    print(
+        'Please upgrade setuptools with "pip install --upgrade setuptools" '
+        "and try again"
+    )
     sys.exit(1)
 
 
@@ -24,10 +27,9 @@ with open(os.path.join(this_directory, "README.md")) as f:
     long_description = f.read()
 
 
-package_name = "dbt-core"
-package_version = "1.9.10"
-description = """With dbt, data analysts and engineers can build analytics \
-the way engineers build applications."""
+package_name = "dvt-ce"
+package_version = "0.1.2"
+description = """DVT — cross-engine data transformation tool with DuckDB federation."""
 
 
 setup(
@@ -43,7 +45,10 @@ setup(
     include_package_data=True,
     test_suite="test",
     entry_points={
-        "console_scripts": ["dbt = dbt.cli.main:cli"],
+        "console_scripts": [
+            "dvt = dbt.cli.main:cli",
+            "dbt = dbt.cli.main:cli",
+        ],
     },
     install_requires=[
         # ----
@@ -80,6 +85,13 @@ setup(
         "pyyaml>=6.0",
         "daff>=1.3.46",
         "typing-extensions>=4.4",
+        # ----
+        # DVT-specific: DuckDB federation engine
+        "sqlglot>=20.0.0",
+        "duckdb>=0.9.0",
+        "pyarrow>=14.0.0",
+        "deltalake>=0.14.0",
+        "adbc-driver-manager>=0.11.0",
         # ----
     ],
     zip_safe=False,
