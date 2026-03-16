@@ -150,15 +150,12 @@ def _map_databricks(c: Dict[str, Any]) -> str:
     host = _safe(c.get("host", ""))
     port = _safe(c.get("port", "443"))
     token = _safe(c.get("token", ""))
-    http_path = _safe(c.get("http_path", ""))
+    http_path = _safe(c.get("http_path", "")).lstrip("/")
     catalog = c.get("catalog")
     schema = c.get("schema")
-    url = f"databricks://{host}:{port}"
+    # Sling Databricks format: databricks://token:TOKEN@host:port/http_path?params
+    url = f"databricks://token:{_quote(token)}@{host}:{port}/{http_path}"
     params = []
-    if token:
-        params.append(f"token={_quote(token)}")
-    if http_path:
-        params.append(f"http_path={http_path}")
     if catalog:
         params.append(f"catalog={_quote(catalog)}")
     if schema:
