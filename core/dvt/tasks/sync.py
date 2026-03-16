@@ -25,13 +25,8 @@ from dvt.sync.profiles_reader import (
     read_profiles_yml,
 )
 from dvt.sync.adapter_installer import (
-    ADAPTER_TO_PACKAGE,
-    check_installed,
-    get_required_packages,
-    install_packages,
     is_dbt_core_installed,
     purge_dbt_core,
-    _pip_install,
 )
 from dvt.sync.duckdb_extensions import get_required_extensions, install_extensions
 from dvt.sync.cloud_deps import get_required_cloud_packages, install_cloud_packages
@@ -125,11 +120,10 @@ class DvtSyncTask:
         db_types = {
             t for t in adapter_types if t not in {"s3", "gcs", "azure", "local"}
         }
-        adapter_packages = get_required_packages(db_types)
 
         print("  Adapters:")
-        if adapter_packages:
-            results = self._install_and_verify_adapters(db_types, adapter_packages)
+        if db_types:
+            results = self._verify_and_install_drivers(db_types)
             for name, status in results:
                 pad = "." * max(1, 30 - len(name))
                 print(f"    {name} {pad} {_status_icon(status)}")
@@ -205,48 +199,45 @@ class DvtSyncTask:
 
         return {"success": all_ok}
 
-    def _install_and_verify_adapters(
+    def _verify_and_install_drivers(
         self,
         db_types: set,
-        adapter_packages: List[str],
     ) -> List[Tuple[str, str]]:
-        """Install adapters, purge dbt-core, verify imports, repair if broken.
+        """Verify adapters are importable and install missing database drivers.
 
-        Uses install_packages() from adapter_installer which:
-        1. Installs connector deps normally (psycopg2, snowflake-connector, etc.)
-        2. Installs adapter packages with --no-deps (avoids pulling dbt-core)
-        3. Purges dbt-core if it sneaked in
+        dvt-adapters already contains all adapter code. This method:
+        1. Checks each adapter can be imported
+        2. If import fails due to missing driver, installs the driver
+        3. Re-checks the import
 
-        After that, we verify each adapter imports and repair if needed.
+        No dbt-* packages are installed from PyPI.
         """
-        # Phase 1: Install via adapter_installer (handles --no-deps + connector deps)
-        results = install_packages(adapter_packages, dry_run=self.dry_run)
+        from dvt.sync.adapter_installer import ADAPTER_CONNECTOR_DEPS, _pip_install
 
-        if self.dry_run:
-            return results
+        results: List[Tuple[str, str]] = []
 
-        # Phase 2: Verify each adapter imports, repair if broken
-        for i, (pkg, status) in enumerate(results):
-            if status == "failed":
+        for adapter_type in sorted(db_types):
+            if self.dry_run:
+                results.append((adapter_type, "dry_run"))
                 continue
 
-            adapter_type = next(
-                (k for k, v in ADAPTER_TO_PACKAGE.items() if v == pkg), None
-            )
-            if not adapter_type:
+            # Check if adapter imports
+            if _check_adapter_importable(adapter_type):
+                results.append((adapter_type, "already_installed"))
                 continue
 
-            if not _check_adapter_importable(adapter_type):
-                # Adapter broke — try reinstall with --no-deps --force-reinstall
-                if _pip_install(pkg, ["--no-deps", "--force-reinstall"]):
-                    if is_dbt_core_installed():
-                        purge_dbt_core()
-                    if _check_adapter_importable(adapter_type):
-                        results[i] = (pkg, "repaired")
-                    else:
-                        results[i] = (pkg, "failed")
-                else:
-                    results[i] = (pkg, "failed")
+            # Adapter failed to import — try installing its driver deps
+            deps = ADAPTER_CONNECTOR_DEPS.get(adapter_type, [])
+            if deps:
+                for dep in deps:
+                    _pip_install(dep)
+
+                # Re-check after installing drivers
+                if _check_adapter_importable(adapter_type):
+                    results.append((adapter_type, "installed"))
+                    continue
+
+            results.append((adapter_type, "failed"))
 
         return results
 
