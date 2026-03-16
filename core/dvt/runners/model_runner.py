@@ -204,82 +204,144 @@ class DvtModelRunner(ModelRunner):
     # ------------------------------------------------------------------
 
     def _execute_duckdb_compute(self, model, manifest) -> RunResult:
+        """DuckDB Compute — extract ALL sources (remote + local) into DuckDB,
+        rewrite SQL to use DuckDB table names, execute, load result to target.
+        """
         from dvt.extraction.sling_client import SlingClient
         from dvt.federation.duckdb_compute import DuckDBCompute
+        from dvt.config.source_connections import load_source_connections
 
         resolution = self._resolution
         start = time.time()
 
         try:
             client = SlingClient()
+            compiled_sql = getattr(model, "compiled_code", "") or ""
+            if not compiled_sql:
+                raise RuntimeError(f"Model {model.name} has no compiled SQL")
 
-            with DuckDBCompute() as duckdb_engine:
-                # Step 1: Extract each remote source into DuckDB
-                for remote in resolution.remote_sources:
-                    source_config = self._get_output_config(remote.connection)
-                    src_schema = remote.schema or ""
-                    src_table = remote.identifier or remote.table_name
-                    query = (
-                        f"SELECT * FROM {src_schema}.{src_table}"
-                        if src_schema
-                        else f"SELECT * FROM {src_table}"
-                    )
-                    duckdb_table = f"{remote.source_name}__{remote.table_name}"
+            # Collect ALL source dependencies (remote AND local)
+            depends_on = getattr(model, "depends_on", None)
+            all_source_uids = []
+            if depends_on:
+                all_source_uids = [
+                    n
+                    for n in (getattr(depends_on, "nodes", []) or [])
+                    if n.startswith("source.")
+                ]
 
-                    client.extract_to_duckdb(
-                        source_config=source_config,
-                        duckdb_path=duckdb_engine.db_path,
-                        source_query=query,
-                        duckdb_table=duckdb_table,
-                    )
+            # Load source connections to determine which connection each source uses
+            project_dir = getattr(self.config.args, "PROJECT_DIR", None) or "."
+            source_connections = load_source_connections(project_dir)
 
-                # Step 2: Extract remote refs into DuckDB
-                for ref_uid in resolution.remote_refs:
-                    ref_node = manifest.nodes.get(ref_uid)
-                    if not ref_node:
-                        continue
-                    ref_target = (
-                        getattr(ref_node.config, "target", None)
-                        or self.config.target_name
-                    )
-                    ref_config = self._get_output_config(ref_target)
-                    ref_schema = getattr(ref_node, "schema", "")
-                    ref_name = getattr(ref_node, "name", "")
-                    query = (
-                        f"SELECT * FROM {ref_schema}.{ref_name}"
-                        if ref_schema
-                        else f"SELECT * FROM {ref_name}"
-                    )
-                    duckdb_table = ref_name
+            # Build replacement map: collect all source ref → DuckDB table mappings
+            # Apply longest-first to avoid cascading replacements
+            ref_replacements = {}  # compiled_sql_ref → duckdb_table_name
 
-                    client.extract_to_duckdb(
-                        source_config=ref_config,
-                        duckdb_path=duckdb_engine.db_path,
-                        source_query=query,
-                        duckdb_table=duckdb_table,
-                    )
+            duckdb_engine = DuckDBCompute()
 
-                # Step 3: Run model SQL in DuckDB
-                compiled_sql = model.compiled_code
-                if not compiled_sql:
-                    raise RuntimeError(f"Model {model.name} has no compiled SQL")
+            # Step 1: Extract ALL sources into DuckDB (remote AND local)
+            for source_uid in all_source_uids:
+                source_node = manifest.sources.get(source_uid)
+                if not source_node:
+                    continue
 
-                result_table = f"__dvt_result_{model.name}"
-                row_count = duckdb_engine.create_result_table(
-                    compiled_sql, result_table
+                src_name = getattr(source_node, "source_name", "")
+                tbl_name = getattr(source_node, "name", "")
+                src_schema = getattr(source_node, "schema", "")
+                src_identifier = getattr(source_node, "identifier", "") or tbl_name
+                src_db = getattr(source_node, "database", "")
+
+                connection = source_connections.get(src_name, resolution.target)
+                source_config = self._get_output_config(connection)
+
+                query = (
+                    f"SELECT * FROM {src_schema}.{src_identifier}"
+                    if src_schema
+                    else f"SELECT * FROM {src_identifier}"
                 )
+                duckdb_table = f"{src_name}__{tbl_name}"
 
-                # Step 4: Load result → target
-                target_config = self._get_output_config(resolution.target)
-                target_table = self._model_table_name(model)
-
-                client.load_from_duckdb(
+                client.extract_to_duckdb(
+                    source_config=source_config,
                     duckdb_path=duckdb_engine.db_path,
-                    target_config=target_config,
-                    source_query=f"SELECT * FROM {result_table}",
-                    target_table=target_table,
-                    mode="full-refresh",
+                    source_query=query,
+                    duckdb_table=duckdb_table,
                 )
+
+                # Collect ref candidates for this source (longest first)
+                candidates = []
+                if src_db and src_schema:
+                    candidates.append(f'"{src_db}"."{src_schema}"."{src_identifier}"')
+                    candidates.append(f"{src_db}.{src_schema}.{src_identifier}")
+                if src_schema:
+                    candidates.append(f'"{src_schema}"."{src_identifier}"')
+                    candidates.append(f"{src_schema}.{src_identifier}")
+
+                for candidate in candidates:
+                    if candidate in compiled_sql:
+                        ref_replacements[candidate] = duckdb_table
+                        break
+
+            # Apply replacements longest-first to avoid cascading
+            for old_ref, new_ref in sorted(
+                ref_replacements.items(), key=lambda x: len(x[0]), reverse=True
+            ):
+                compiled_sql = compiled_sql.replace(old_ref, new_ref)
+
+            # Step 2: Extract remote refs into DuckDB
+            for ref_uid in resolution.remote_refs or []:
+                ref_node = manifest.nodes.get(ref_uid)
+                if not ref_node:
+                    continue
+                ref_target = (
+                    getattr(ref_node.config, "target", None) or self.config.target_name
+                )
+                ref_config = self._get_output_config(ref_target)
+                ref_schema = getattr(ref_node, "schema", "")
+                ref_name = getattr(ref_node, "name", "")
+                query = (
+                    f"SELECT * FROM {ref_schema}.{ref_name}"
+                    if ref_schema
+                    else f"SELECT * FROM {ref_name}"
+                )
+                client.extract_to_duckdb(
+                    source_config=ref_config,
+                    duckdb_path=duckdb_engine.db_path,
+                    source_query=query,
+                    duckdb_table=ref_name,
+                )
+
+            # Step 3: Run rewritten model SQL in DuckDB
+            logger.info(f"DVT [{model.name}]: DuckDB SQL: {compiled_sql[:200]}...")
+            result_table = f"__dvt_result_{model.name}"
+            row_count = duckdb_engine.create_result_table(compiled_sql, result_table)
+
+            # Close DuckDB connection before Sling reads the file
+            db_path = duckdb_engine.db_path
+            duckdb_engine._conn.close()
+            duckdb_engine._conn = None
+
+            # Step 4: Load result → target (DuckDB file unlocked)
+            target_config = self._get_output_config(resolution.target)
+            target_table = self._model_table_name(model)
+
+            client.load_from_duckdb(
+                duckdb_path=db_path,
+                target_config=target_config,
+                source_query=f"SELECT * FROM {result_table}",
+                target_table=target_table,
+                mode="full-refresh",
+            )
+
+            # Clean up DuckDB temp file
+            import os
+
+            for suffix in ["", ".wal", ".tmp"]:
+                try:
+                    os.unlink(db_path + suffix)
+                except OSError:
+                    pass
 
             elapsed = time.time() - start
             msg = f"DuckDB Compute → {target_table} ({row_count} rows)"
