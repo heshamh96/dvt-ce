@@ -5,16 +5,21 @@ Install DuckDB extensions based on adapter types found in profiles.yml.
 from typing import Dict, List, Set, Tuple
 
 # Maps adapter type → DuckDB extension(s) needed
+# Used for both dvt show (ATTACH) and dvt run (extraction cache)
 ADAPTER_TO_EXTENSIONS: Dict[str, List[str]] = {
+    # Native ATTACH support
     "postgres": ["postgres_scanner"],
+    "redshift": ["postgres_scanner"],  # Redshift is PG-compatible
     "mysql": ["mysql_scanner"],
+    "mariadb": ["mysql_scanner"],  # MariaDB uses MySQL protocol
     "sqlite": ["sqlite_scanner"],
+    # Cloud/bucket support
     "s3": ["httpfs"],
     "gcs": ["httpfs"],
     "azure": ["azure"],
 }
 
-# Always install these extensions
+# Always install these extensions (needed for cache and general use)
 ALWAYS_INSTALL = ["delta", "json"]
 
 
