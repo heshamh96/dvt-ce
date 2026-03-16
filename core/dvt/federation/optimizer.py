@@ -133,9 +133,12 @@ def optimize_extractions(
     limit_value = _extract_limit(parsed)
 
     # Build optimized extractions
+    # NOTE: No column pruning on extraction — the DuckDB cache is shared
+    # across models, so one model's column needs may differ from another's.
+    # DuckDB handles column pruning internally when executing model SQL.
+    # We only push down predicates and LIMIT to reduce row count.
     result: Dict[str, OptimizedExtraction] = {}
     for cache_table in source_table_map:
-        columns = sorted(columns_per_table.get(cache_table, set()))
         predicates = predicates_per_table.get(cache_table, [])
 
         # Only apply LIMIT if the query is a simple single-table select
@@ -143,7 +146,7 @@ def optimize_extractions(
 
         result[cache_table] = OptimizedExtraction(
             cache_table=cache_table,
-            columns=columns,
+            columns=[],  # Always SELECT * — cache is shared across models
             predicates=predicates,
             limit=table_limit,
         )
