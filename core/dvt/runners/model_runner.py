@@ -185,8 +185,9 @@ class DvtModelRunner(ModelRunner):
                 )
 
             # ----------------------------------------------------------
-            # Step 1: Extract each source → DuckDB cache
+            # Step 1: Collect source metadata + rewrite SQL refs
             # ----------------------------------------------------------
+            source_meta = []  # List of (source_uid, src_name, tbl_name, src_schema, src_identifier, connection, source_config, cache_table)
             ref_replacements = {}
 
             for source_uid in all_source_uids:
@@ -202,41 +203,22 @@ class DvtModelRunner(ModelRunner):
 
                 connection = source_connections.get(src_name, resolution.target)
                 source_config = self._get_output_config(connection)
-
                 cache_table = cache.source_table_name(src_name, tbl_name)
 
-                # Build extraction query
-                extraction_query = (
-                    f"SELECT * FROM {src_schema}.{src_identifier}"
-                    if src_schema
-                    else f"SELECT * FROM {src_identifier}"
-                )
-
-                # For incremental: add watermark filter to extraction
-                if is_incremental and watermark_value is not None and watermark_column:
-                    from dvt.extraction.watermark_formatter import format_watermark
-
-                    source_type = source_config.get("type", "")
-                    formatted = format_watermark(
-                        watermark_value, source_type, "timestamp"
+                source_meta.append(
+                    (
+                        source_uid,
+                        src_name,
+                        tbl_name,
+                        src_schema,
+                        src_identifier,
+                        connection,
+                        source_config,
+                        cache_table,
                     )
-                    extraction_query += f" WHERE {watermark_column} > {formatted}"
-
-                # Extract via Sling → DuckDB cache
-                # Close DuckDB first so Sling can write to the file
-                cache.close_and_release()
-
-                client.extract_to_duckdb(
-                    source_config=source_config,
-                    duckdb_path=cache.db_path,
-                    source_query=extraction_query,
-                    duckdb_table=cache_table,
                 )
 
-                # Reopen after Sling is done
-                cache.reopen()
-
-                # Collect ref replacements for SQL rewriting
+                # Collect ref replacements
                 candidates = []
                 if src_db and src_schema:
                     candidates.append(f'"{src_db}"."{src_schema}"."{src_identifier}"')
@@ -250,7 +232,82 @@ class DvtModelRunner(ModelRunner):
                         ref_replacements[candidate] = cache_table
                         break
 
-            # Also extract remote refs
+            # Rewrite SQL (source refs → cache table names)
+            rewritten_sql = compiled_sql
+            for old_ref, new_ref in sorted(
+                ref_replacements.items(), key=lambda x: len(x[0]), reverse=True
+            ):
+                rewritten_sql = rewritten_sql.replace(old_ref, new_ref)
+
+            # ----------------------------------------------------------
+            # Step 2: Run federation optimizer on rewritten SQL
+            # ----------------------------------------------------------
+            from dvt.federation.optimizer import optimize_extractions
+
+            source_table_map = {
+                sm[7]: sm[7] for sm in source_meta
+            }  # cache_table → cache_table
+            optimized = optimize_extractions(rewritten_sql, source_table_map)
+
+            # ----------------------------------------------------------
+            # Step 3: Extract each source → DuckDB cache (with optimization)
+            # ----------------------------------------------------------
+            for (
+                source_uid,
+                src_name,
+                tbl_name,
+                src_schema,
+                src_identifier,
+                connection,
+                source_config,
+                cache_table,
+            ) in source_meta:
+                # Build extraction query — use optimizer if available
+                opt = optimized.get(cache_table)
+                if opt and (opt.columns or opt.predicates or opt.limit is not None):
+                    from dvt.federation.optimizer import ADAPTER_TO_SQLGLOT_DIALECT
+
+                    source_type = source_config.get("type", "")
+                    source_dialect = ADAPTER_TO_SQLGLOT_DIALECT.get(
+                        source_type, source_type
+                    )
+                    extraction_query = opt.build_query(
+                        src_schema, src_identifier, source_dialect
+                    )
+                    logger.info(
+                        f"DVT [{model.name}]: optimized extraction for {cache_table} ({source_type}→{source_dialect}): {extraction_query[:100]}"
+                    )
+                else:
+                    extraction_query = (
+                        f"SELECT * FROM {src_schema}.{src_identifier}"
+                        if src_schema
+                        else f"SELECT * FROM {src_identifier}"
+                    )
+
+                # For incremental: add watermark filter
+                if is_incremental and watermark_value is not None and watermark_column:
+                    from dvt.extraction.watermark_formatter import format_watermark
+
+                    source_type = source_config.get("type", "")
+                    formatted = format_watermark(
+                        watermark_value, source_type, "timestamp"
+                    )
+                    if "WHERE" in extraction_query.upper():
+                        extraction_query += f" AND {watermark_column} > {formatted}"
+                    else:
+                        extraction_query += f" WHERE {watermark_column} > {formatted}"
+
+                # Extract via Sling → DuckDB cache
+                cache.close_and_release()
+                client.extract_to_duckdb(
+                    source_config=source_config,
+                    duckdb_path=cache.db_path,
+                    source_query=extraction_query,
+                    duckdb_table=cache_table,
+                )
+                cache.reopen()
+
+            # Also extract remote refs (no optimization for refs)
             for ref_uid in resolution.remote_refs or []:
                 ref_node = manifest.nodes.get(ref_uid)
                 if not ref_node:
@@ -276,13 +333,8 @@ class DvtModelRunner(ModelRunner):
                 )
                 cache.reopen()
 
-            # ----------------------------------------------------------
-            # Step 2: Rewrite compiled SQL (source refs → cache tables)
-            # ----------------------------------------------------------
-            for old_ref, new_ref in sorted(
-                ref_replacements.items(), key=lambda x: len(x[0]), reverse=True
-            ):
-                compiled_sql = compiled_sql.replace(old_ref, new_ref)
+            # Use the already-rewritten SQL for DuckDB execution
+            compiled_sql = rewritten_sql
 
             # Also rewrite {{ this }} for incremental models.
             # {{ this }} compiles to the target table ref (e.g., "devdb"."public"."model_name").
