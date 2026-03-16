@@ -311,12 +311,24 @@ def show(ctx, **kwargs):
 @requires.unset_profile
 @requires.project
 def clean(ctx, **kwargs):
-    """Delete all folders in the clean-targets list."""
+    """Delete all folders in the clean-targets list and the DVT cache."""
+    import os
+    import shutil
+
     from dbt.task.clean import CleanTask
 
+    # Standard dbt clean
     with CleanTask(ctx.obj["flags"], ctx.obj["project"]) as task:
         results = task.run()
         success = task.interpret_results(results)
+
+    # Also delete .dvt/ cache directory
+    project_dir = getattr(ctx.obj["flags"], "PROJECT_DIR", None) or "."
+    dvt_cache_dir = os.path.join(os.path.abspath(project_dir), ".dvt")
+    if os.path.isdir(dvt_cache_dir):
+        shutil.rmtree(dvt_cache_dir, ignore_errors=True)
+        click.echo(f"  Deleted DVT cache: {dvt_cache_dir}")
+
     return results, success
 
 

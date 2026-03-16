@@ -9,9 +9,18 @@ from typing import Any, Dict, List, Set, Tuple
 
 
 def default_profiles_dir() -> str:
-    """Return default profiles directory, same logic as dbt."""
+    """Return default profiles directory.
+
+    Search order:
+    1. Current working directory (if profiles.yml exists)
+    2. ~/.dvt (DVT-specific)
+    3. ~/.dbt (dbt-compatible, works with VS Code dbt extensions)
+    """
     if (Path.cwd() / "profiles.yml").exists():
         return str(Path.cwd())
+    dvt_dir = Path.home() / ".dvt"
+    if (dvt_dir / "profiles.yml").exists():
+        return str(dvt_dir)
     return str(Path.home() / ".dbt")
 
 
