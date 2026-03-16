@@ -1,10 +1,10 @@
 """
 DVT Run Task — extends dbt's RunTask with cross-engine extraction.
 
-Overrides get_runner_type() to return DvtModelRunner for models that
-require cross-engine extraction (Sling Direct or DuckDB Compute paths).
+Manages the persistent DuckDB cache (.dvt/cache.duckdb) and dispatches
+DvtModelRunner for extraction models.
 
-For pushdown models (all sources on target), uses stock dbt ModelRunner.
+--full-refresh destroys the cache and re-extracts everything.
 """
 
 import logging
@@ -18,6 +18,7 @@ from dvt.config.target_resolver import (
     ResolvedModel,
     resolve_all_models,
 )
+from dvt.federation.dvt_cache import DvtCache
 from dvt.runners.model_runner import DvtModelRunner
 from dvt.sync.profiles_reader import default_profiles_dir, read_profiles_yml
 
@@ -25,16 +26,15 @@ logger = logging.getLogger(__name__)
 
 
 class DvtRunTask(RunTask):
-    """Extends RunTask with DVT three-path execution.
+    """Extends RunTask with DVT extraction via persistent DuckDB cache.
 
-    Before execution:
-    1. Reads profiles.yml for output configs
-    2. Reads sources.yml for source→connection mappings
-    3. Resolves execution paths for all models
-
-    During execution:
-    4. Returns DvtModelRunner for extraction models, stock ModelRunner for pushdown
-    5. DvtModelRunner handles Sling/DuckDB orchestration transparently
+    Lifecycle:
+    1. Reads profiles.yml + sources.yml
+    2. Resolves execution paths for all models
+    3. If --full-refresh: destroys the DuckDB cache
+    4. Opens/creates the DuckDB cache at .dvt/cache.duckdb
+    5. For each extraction model: DvtModelRunner uses the shared cache
+    6. Cache persists for incremental support on next run
     """
 
     def __init__(self, args, config, manifest):
@@ -42,13 +42,14 @@ class DvtRunTask(RunTask):
         self._resolutions: Dict[str, ResolvedModel] = {}
         self._raw_profiles: Optional[dict] = None
         self._source_connections: Optional[Dict[str, str]] = None
+        self._cache: Optional[DvtCache] = None
 
     def _resolve_models(self) -> None:
         """Resolve execution paths for all models in the manifest."""
         if self._resolutions:
-            return  # already resolved
+            return
 
-        # Read profiles.yml for output configs
+        # Read profiles.yml
         profiles_dir = (
             getattr(self.args, "PROFILES_DIR", None) or default_profiles_dir()
         )
@@ -58,36 +59,42 @@ class DvtRunTask(RunTask):
             logger.warning(f"DVT: Could not read profiles.yml: {e}")
             self._raw_profiles = {}
 
-        # Read source connections from sources.yml files
+        # Read source connections
         project_dir = getattr(self.args, "PROJECT_DIR", None) or "."
         self._source_connections = load_source_connections(project_dir)
 
-        # Get default target and CLI target
+        # Resolve
         default_target = self.config.target_name
         cli_target = getattr(self.args, "TARGET", None)
-
-        # Resolve all models
         self._resolutions = resolve_all_models(
-            self.manifest,
-            default_target,
-            self._source_connections,
-            cli_target,
+            self.manifest, default_target, self._source_connections, cli_target
         )
 
-        # Log extraction summary
+        # Count extraction models
         extraction_count = sum(
             1
             for r in self._resolutions.values()
             if r.execution_path
             in (ExecutionPath.SLING_DIRECT, ExecutionPath.DUCKDB_COMPUTE)
         )
+
         if extraction_count > 0:
-            logger.info(
-                f"DVT: {extraction_count} model(s) require cross-engine extraction"
-            )
+            logger.info(f"DVT: {extraction_count} model(s) require extraction")
+
+            # Initialize the DuckDB cache
+            project_dir = getattr(self.args, "PROJECT_DIR", None) or "."
+            self._cache = DvtCache(project_dir=project_dir)
+
+            # --full-refresh: destroy cache
+            full_refresh = getattr(self.args, "FULL_REFRESH", False)
+            if full_refresh:
+                logger.info("DVT: --full-refresh — destroying DuckDB cache")
+                self._cache.destroy()
+                # Recreate (destroy deleted the dir, cache will recreate on first use)
+                self._cache = DvtCache(project_dir=project_dir)
 
     def get_runner_type(self, node) -> Optional[Type]:
-        """Return DvtModelRunner for extraction models, stock runner for pushdown."""
+        """Return DvtModelRunner for extraction models."""
         self._resolve_models()
 
         uid = getattr(node, "unique_id", None)
@@ -99,20 +106,19 @@ class DvtRunTask(RunTask):
             ):
                 return DvtModelRunner
 
-        # Pushdown — use stock dbt runner selection
         return super().get_runner_type(node)
 
     def get_runner(self, node):
-        """Get runner and inject DVT context for extraction models."""
+        """Get runner and inject DVT context (resolution, profiles, cache)."""
         runner = super().get_runner(node)
 
-        # If it's a DvtModelRunner, inject the resolution and profiles
         if isinstance(runner, DvtModelRunner):
             uid = getattr(node, "unique_id", None)
             if uid and uid in self._resolutions:
                 runner.set_dvt_context(
                     resolution=self._resolutions[uid],
                     profiles=self._raw_profiles or {},
+                    cache=self._cache,
                 )
 
         return runner

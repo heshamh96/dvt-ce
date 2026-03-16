@@ -1,21 +1,23 @@
 """
 DVT Model Runner — extends dbt's ModelRunner with cross-engine extraction.
 
-Implements the three-way dispatch:
-1. Default/Non-Default Pushdown → delegates to stock dbt ModelRunner
-2. Sling Direct (single remote source) → Sling streams source → target model table
-3. DuckDB Compute (multi remote sources) → Sling → DuckDB → Sling → target
+Two-way dispatch:
+1. Pushdown → delegates to stock dbt ModelRunner (all sources local)
+2. Extraction → Sling → DuckDB cache → model SQL → Sling → target
 
-The user writes standard dbt models. DVT detects remote sources automatically
-and routes to the appropriate execution path.
+ALL extraction models go through the persistent DuckDB cache (.dvt/cache.duckdb).
+There is no "Sling Direct" sub-path. This ensures:
+- Consistent DuckDB SQL dialect for all cross-engine models
+- Incremental support via persistent cache
+- Cache per source (shared across models)
 """
 
 import logging
-import threading
 import time
-from typing import Any, Dict, List, Optional
+import threading
+from typing import Any, Dict, List, Optional, Tuple
 
-from dbt.artifacts.schemas.results import RunStatus, TimingInfo
+from dbt.artifacts.schemas.results import RunStatus
 from dbt.artifacts.schemas.run.v5.run import RunResult
 from dbt.task.run import ModelRunner
 
@@ -31,7 +33,7 @@ def _make_run_result(
     execution_time: float,
     rows_affected: int = 0,
 ) -> RunResult:
-    """Build a RunResult for Sling/DuckDB execution paths."""
+    """Build a RunResult for extraction execution paths."""
     return RunResult(
         status=status,
         thread_id=threading.current_thread().name,
@@ -46,23 +48,30 @@ def _make_run_result(
 
 
 class DvtModelRunner(ModelRunner):
-    """Extends ModelRunner with DVT cross-engine extraction paths."""
+    """Extends ModelRunner with DVT extraction via DuckDB cache.
 
-    # Set by DvtRunTask before execution
+    Two-way dispatch:
+    - Pushdown: super().execute() (stock dbt)
+    - Extraction: Sling→DuckDB cache→Sling→target
+    """
+
     _resolution: Optional[ResolvedModel] = None
     _profiles: Optional[dict] = None
+    _cache = None  # DvtCache instance, shared across runners
 
     def set_dvt_context(
         self,
         resolution: ResolvedModel,
         profiles: dict,
+        cache: Any = None,
     ) -> None:
         """Set DVT-specific context for this runner."""
         self._resolution = resolution
         self._profiles = profiles
+        self._cache = cache
 
     def execute(self, model, manifest):
-        """Three-way dispatch based on resolved execution path."""
+        """Two-way dispatch: pushdown vs extraction."""
         if self._resolution is None:
             return super().execute(model, manifest)
 
@@ -72,143 +81,30 @@ class DvtModelRunner(ModelRunner):
             logger.info(f"DVT [{model.name}]: {path.value}")
             return super().execute(model, manifest)
 
-        elif path == ExecutionPath.SLING_DIRECT:
-            logger.info(f"DVT [{model.name}]: sling_direct")
-            return self._execute_sling_direct(model, manifest)
-
-        elif path == ExecutionPath.DUCKDB_COMPUTE:
-            logger.info(f"DVT [{model.name}]: duckdb_compute")
-            return self._execute_duckdb_compute(model, manifest)
+        elif path in (ExecutionPath.SLING_DIRECT, ExecutionPath.DUCKDB_COMPUTE):
+            # Both old sub-paths now route to unified extraction
+            logger.info(f"DVT [{model.name}]: extraction via DuckDB cache")
+            return self._execute_extraction(model, manifest)
 
         else:
             return super().execute(model, manifest)
 
     # ------------------------------------------------------------------
-    # Sling Direct — single remote source, streams to target model table
+    # Unified Extraction: Sling → DuckDB cache → Sling → Target
     # ------------------------------------------------------------------
 
-    def _execute_sling_direct(self, model, manifest) -> RunResult:
-        """Sling Direct — extract remote source(s) to staging, run model SQL on target.
+    def _execute_extraction(self, model, manifest) -> RunResult:
+        """Unified extraction path for ALL cross-engine models.
 
-        Steps:
-        1. For each remote source: Sling extracts to a staging table on the target
-        2. Rewrite model's compiled SQL to replace remote source refs with staging tables
-        3. Execute rewritten SQL on the target via adapter (CREATE TABLE AS)
-        4. Drop staging tables
+        1. Extract each remote source → DuckDB cache (Sling)
+        2. Rewrite compiled SQL (source refs → cache table names)
+        3. Execute model SQL in DuckDB
+        4. Store model result in DuckDB cache (for incremental {{ this }})
+        5. Close DuckDB (release file lock)
+        6. Sling loads result from DuckDB → target
         """
         from dvt.extraction.sling_client import SlingClient
-
-        resolution = self._resolution
-        start = time.time()
-        staging_tables = []
-
-        try:
-            client = SlingClient()
-            target_config = self._get_output_config(resolution.target)
-            compiled_sql = getattr(model, "compiled_code", "") or ""
-
-            # Step 1: Extract each remote source to a staging table
-            for remote in resolution.remote_sources or []:
-                source_config = self._get_output_config(remote.connection)
-                src_schema = remote.schema or ""
-                src_table = remote.identifier or remote.table_name
-                extraction_query = (
-                    f"SELECT * FROM {src_schema}.{src_table}"
-                    if src_schema
-                    else f"SELECT * FROM {src_table}"
-                )
-
-                staging_name = f"_dvt_stg_{remote.source_name}__{remote.table_name}"
-                staging_fqn = (
-                    f"{model.schema}.{staging_name}" if model.schema else staging_name
-                )
-                staging_tables.append(staging_fqn)
-
-                client.extract_to_target(
-                    source_config=source_config,
-                    target_config=target_config,
-                    source_query=extraction_query,
-                    target_table=staging_fqn,
-                    mode="full-refresh",
-                    primary_key=None,
-                )
-
-                # Step 2: Rewrite compiled SQL — replace remote source ref with staging table
-                # The compiled SQL has the source ref as resolved by dbt, e.g.:
-                #   "devdb"."devdb"."test_seed"  (database.schema.table with quotes)
-                # We need to replace it with the staging table on the target.
-                source_node = manifest.sources.get(remote.source_unique_id)
-                if source_node:
-                    # Build the ref string that dbt generated for this source
-                    src_db = getattr(source_node, "database", "")
-                    src_sch = getattr(source_node, "schema", "")
-                    src_id = getattr(source_node, "identifier", "") or getattr(
-                        source_node, "name", ""
-                    )
-
-                    # Try various formats dbt might have generated
-                    candidates = []
-                    if src_db and src_sch:
-                        candidates.append(f'"{src_db}"."{src_sch}"."{src_id}"')
-                        candidates.append(f"{src_db}.{src_sch}.{src_id}")
-                    if src_sch:
-                        candidates.append(f'"{src_sch}"."{src_id}"')
-                        candidates.append(f"{src_sch}.{src_id}")
-                    candidates.append(f'"{src_id}"')
-                    candidates.append(src_id)
-
-                    # Target staging ref — unquoted for simplicity
-                    target_ref = staging_fqn
-
-                    for candidate in candidates:
-                        if candidate in compiled_sql:
-                            compiled_sql = compiled_sql.replace(candidate, target_ref)
-                            break
-
-            # Step 3: Execute rewritten model SQL on target via adapter
-            target_table = self._model_table_name(model)
-            create_sql = f"DROP TABLE IF EXISTS {target_table};\nCREATE TABLE {target_table} AS (\n{compiled_sql}\n)"
-
-            for stmt in create_sql.split(";\n"):
-                stmt = stmt.strip()
-                if stmt:
-                    self.adapter.execute(stmt, auto_begin=True)
-            self.adapter.commit_if_has_connection()
-
-            # Step 4: Drop staging tables
-            for stg in staging_tables:
-                try:
-                    self.adapter.execute(f"DROP TABLE IF EXISTS {stg}", auto_begin=True)
-                    self.adapter.commit_if_has_connection()
-                except Exception:
-                    pass
-
-            elapsed = time.time() - start
-            msg = f"Sling Direct → {target_table}"
-            return _make_run_result(model, RunStatus.Success, msg, elapsed)
-
-        except Exception as e:
-            elapsed = time.time() - start
-            logger.error(f"DVT [{model.name}]: Sling Direct failed: {e}")
-            # Cleanup staging on error
-            for stg in staging_tables:
-                try:
-                    self.adapter.execute(f"DROP TABLE IF EXISTS {stg}", auto_begin=True)
-                    self.adapter.commit_if_has_connection()
-                except Exception:
-                    pass
-            return _make_run_result(model, RunStatus.Error, str(e), elapsed)
-
-    # ------------------------------------------------------------------
-    # DuckDB Compute — multiple remote sources, process in DuckDB
-    # ------------------------------------------------------------------
-
-    def _execute_duckdb_compute(self, model, manifest) -> RunResult:
-        """DuckDB Compute — extract ALL sources (remote + local) into DuckDB,
-        rewrite SQL to use DuckDB table names, execute, load result to target.
-        """
-        from dvt.extraction.sling_client import SlingClient
-        from dvt.federation.duckdb_compute import DuckDBCompute
+        from dvt.federation.dvt_cache import DvtCache
         from dvt.config.source_connections import load_source_connections
 
         resolution = self._resolution
@@ -216,11 +112,43 @@ class DvtModelRunner(ModelRunner):
 
         try:
             client = SlingClient()
+            cache = self._cache
+            if cache is None:
+                project_dir = getattr(self.config.args, "PROJECT_DIR", None) or "."
+                cache = DvtCache(project_dir=project_dir)
+
+            # Acquire file lock — DuckDB has exclusive file locking, and Sling
+            # is an external process that also needs it. Serialize all extraction.
+            DvtCache._file_lock.acquire()
+            try:
+                return self._execute_extraction_locked(
+                    model, manifest, resolution, client, cache
+                )
+            finally:
+                DvtCache._file_lock.release()
+
+        except Exception as e:
+            elapsed = time.time() - start
+            logger.error(f"DVT [{model.name}]: extraction failed: {e}")
+            return _make_run_result(model, RunStatus.Error, str(e), elapsed)
+
+    def _execute_extraction_locked(
+        self, model, manifest, resolution, client, cache
+    ) -> RunResult:
+        """Inner extraction logic — called while holding the file lock."""
+        from dvt.config.source_connections import load_source_connections
+
+        start = time.time()
+
+        try:
+            # Ensure cache file exists before any Sling operations
+            cache.ensure_created()
+
             compiled_sql = getattr(model, "compiled_code", "") or ""
             if not compiled_sql:
                 raise RuntimeError(f"Model {model.name} has no compiled SQL")
 
-            # Collect ALL source dependencies (remote AND local)
+            # Collect ALL source dependencies
             depends_on = getattr(model, "depends_on", None)
             all_source_uids = []
             if depends_on:
@@ -230,17 +158,28 @@ class DvtModelRunner(ModelRunner):
                     if n.startswith("source.")
                 ]
 
-            # Load source connections to determine which connection each source uses
             project_dir = getattr(self.config.args, "PROJECT_DIR", None) or "."
             source_connections = load_source_connections(project_dir)
 
-            # Build replacement map: collect all source ref → DuckDB table mappings
-            # Apply longest-first to avoid cascading replacements
-            ref_replacements = {}  # compiled_sql_ref → duckdb_table_name
+            # Check incremental state
+            materialization = model.get_materialization()
+            is_incremental = (
+                materialization == "incremental" and cache.has_model_result(model.name)
+            )
 
-            duckdb_engine = DuckDBCompute()
+            # Resolve watermark if incremental
+            watermark_value = None
+            watermark_column = None
+            if is_incremental:
+                watermark_value, watermark_column = self._resolve_watermark_from_target(
+                    model
+                )
 
-            # Step 1: Extract ALL sources into DuckDB (remote AND local)
+            # ----------------------------------------------------------
+            # Step 1: Extract each source → DuckDB cache
+            # ----------------------------------------------------------
+            ref_replacements = {}
+
             for source_uid in all_source_uids:
                 source_node = manifest.sources.get(source_uid)
                 if not source_node:
@@ -255,21 +194,40 @@ class DvtModelRunner(ModelRunner):
                 connection = source_connections.get(src_name, resolution.target)
                 source_config = self._get_output_config(connection)
 
-                query = (
+                cache_table = cache.source_table_name(src_name, tbl_name)
+
+                # Build extraction query
+                extraction_query = (
                     f"SELECT * FROM {src_schema}.{src_identifier}"
                     if src_schema
                     else f"SELECT * FROM {src_identifier}"
                 )
-                duckdb_table = f"{src_name}__{tbl_name}"
+
+                # For incremental: add watermark filter to extraction
+                if is_incremental and watermark_value is not None and watermark_column:
+                    from dvt.extraction.watermark_formatter import format_watermark
+
+                    source_type = source_config.get("type", "")
+                    formatted = format_watermark(
+                        watermark_value, source_type, "timestamp"
+                    )
+                    extraction_query += f" WHERE {watermark_column} > {formatted}"
+
+                # Extract via Sling → DuckDB cache
+                # Close DuckDB first so Sling can write to the file
+                cache.close_and_release()
 
                 client.extract_to_duckdb(
                     source_config=source_config,
-                    duckdb_path=duckdb_engine.db_path,
-                    source_query=query,
-                    duckdb_table=duckdb_table,
+                    duckdb_path=cache.db_path,
+                    source_query=extraction_query,
+                    duckdb_table=cache_table,
                 )
 
-                # Collect ref candidates for this source (longest first)
+                # Reopen after Sling is done
+                cache.reopen()
+
+                # Collect ref replacements for SQL rewriting
                 candidates = []
                 if src_db and src_schema:
                     candidates.append(f'"{src_db}"."{src_schema}"."{src_identifier}"')
@@ -280,16 +238,10 @@ class DvtModelRunner(ModelRunner):
 
                 for candidate in candidates:
                     if candidate in compiled_sql:
-                        ref_replacements[candidate] = duckdb_table
+                        ref_replacements[candidate] = cache_table
                         break
 
-            # Apply replacements longest-first to avoid cascading
-            for old_ref, new_ref in sorted(
-                ref_replacements.items(), key=lambda x: len(x[0]), reverse=True
-            ):
-                compiled_sql = compiled_sql.replace(old_ref, new_ref)
-
-            # Step 2: Extract remote refs into DuckDB
+            # Also extract remote refs
             for ref_uid in resolution.remote_refs or []:
                 ref_node = manifest.nodes.get(ref_uid)
                 if not ref_node:
@@ -305,136 +257,88 @@ class DvtModelRunner(ModelRunner):
                     if ref_schema
                     else f"SELECT * FROM {ref_name}"
                 )
+
+                cache.close_and_release()
                 client.extract_to_duckdb(
                     source_config=ref_config,
-                    duckdb_path=duckdb_engine.db_path,
+                    duckdb_path=cache.db_path,
                     source_query=query,
                     duckdb_table=ref_name,
                 )
+                cache.reopen()
 
-            # Step 3: Run rewritten model SQL in DuckDB
+            # ----------------------------------------------------------
+            # Step 2: Rewrite compiled SQL (source refs → cache tables)
+            # ----------------------------------------------------------
+            for old_ref, new_ref in sorted(
+                ref_replacements.items(), key=lambda x: len(x[0]), reverse=True
+            ):
+                compiled_sql = compiled_sql.replace(old_ref, new_ref)
+
+            # ----------------------------------------------------------
+            # Step 3: Execute model SQL in DuckDB + cache the result
+            # ----------------------------------------------------------
             logger.info(f"DVT [{model.name}]: DuckDB SQL: {compiled_sql[:200]}...")
-            result_table = f"__dvt_result_{model.name}"
-            row_count = duckdb_engine.create_result_table(compiled_sql, result_table)
+            row_count = cache.save_model_result(model.name, compiled_sql)
 
-            # Close DuckDB connection before Sling reads the file
-            db_path = duckdb_engine.db_path
-            duckdb_engine._conn.close()
-            duckdb_engine._conn = None
+            # ----------------------------------------------------------
+            # Step 4: Close DuckDB, Sling loads result → target
+            # ----------------------------------------------------------
+            result_table = cache.model_table_name(model.name)
+            db_path = cache.db_path
+            cache.close_and_release()
 
-            # Step 4: Load result → target (DuckDB file unlocked)
             target_config = self._get_output_config(resolution.target)
             target_table = self._model_table_name(model)
+
+            # Determine Sling mode for target
+            if is_incremental:
+                sling_mode = "incremental"
+                unique_key = model.config.get("unique_key")
+                primary_key = (
+                    [unique_key] if isinstance(unique_key, str) else (unique_key or [])
+                )
+            else:
+                sling_mode = "full-refresh"
+                primary_key = None
 
             client.load_from_duckdb(
                 duckdb_path=db_path,
                 target_config=target_config,
                 source_query=f"SELECT * FROM {result_table}",
                 target_table=target_table,
-                mode="full-refresh",
+                mode=sling_mode,
+                primary_key=primary_key,
             )
 
-            # Clean up DuckDB temp file
-            import os
-
-            for suffix in ["", ".wal", ".tmp"]:
-                try:
-                    os.unlink(db_path + suffix)
-                except OSError:
-                    pass
+            # Reopen cache for potential next model
+            cache.reopen()
 
             elapsed = time.time() - start
-            msg = f"DuckDB Compute → {target_table} ({row_count} rows)"
+            incr_label = " (incremental)" if is_incremental else ""
+            msg = f"DuckDB Cache → {target_table} ({row_count} rows{incr_label})"
             return _make_run_result(model, RunStatus.Success, msg, elapsed, row_count)
 
         except Exception as e:
             elapsed = time.time() - start
-            logger.error(f"DVT [{model.name}]: DuckDB Compute failed: {e}")
+            logger.error(f"DVT [{model.name}]: extraction failed: {e}")
             return _make_run_result(model, RunStatus.Error, str(e), elapsed)
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
 
-    def _build_single_source_query(
-        self, model, manifest, resolution: ResolvedModel
-    ) -> tuple:
-        """Build the extraction query for Sling Direct path.
+    def _resolve_watermark_from_target(
+        self, model
+    ) -> Tuple[Optional[Any], Optional[str]]:
+        """Query the TARGET for the incremental watermark value.
 
-        For incremental models, pre-resolves the watermark from the target
-        and formats it as a dialect-specific literal for the source engine.
-
-        Returns:
-            (source_connection_name, extraction_query)
+        Scans the compiled SQL for common update_key column names.
+        Returns (watermark_value, column_name) or (None, None).
         """
-        if resolution.remote_sources:
-            remote = resolution.remote_sources[0]
-            source_connection = remote.connection
-            src_schema = remote.schema or ""
-            src_table = remote.identifier or remote.table_name
-            fqn = f"{src_schema}.{src_table}" if src_schema else src_table
-        elif resolution.remote_refs:
-            ref_uid = resolution.remote_refs[0]
-            ref_node = manifest.nodes.get(ref_uid)
-            if not ref_node:
-                raise RuntimeError(f"Cannot resolve remote ref {ref_uid}")
-            source_connection = (
-                getattr(ref_node.config, "target", None) or self.config.target_name
-            )
-            ref_schema = getattr(ref_node, "schema", "")
-            ref_name = getattr(ref_node, "name", "")
-            fqn = f"{ref_schema}.{ref_name}" if ref_schema else ref_name
-        else:
-            raise RuntimeError(f"No remote sources or refs found for {model.name}")
-
-        # Base query
-        query = f"SELECT * FROM {fqn}"
-
-        # For incremental: pre-resolve watermark
-        materialization = model.get_materialization()
-        if materialization == "incremental" and self._is_incremental(model):
-            watermark_clause = self._resolve_watermark(
-                model, source_connection, resolution.target
-            )
-            if watermark_clause:
-                query += f" WHERE {watermark_clause}"
-
-        return source_connection, query
-
-    def _is_incremental(self, model) -> bool:
-        """Check if this is an incremental run (table exists on target)."""
-        try:
-            relation = self.adapter.get_relation(
-                database=model.database,
-                schema=model.schema,
-                identifier=model.name,
-            )
-            return relation is not None
-        except Exception:
-            return False
-
-    def _resolve_watermark(
-        self, model, source_connection: str, target_name: str
-    ) -> Optional[str]:
-        """Pre-resolve the incremental watermark from the target table.
-
-        Queries the target for MAX(update_key), formats the value as a
-        dialect-specific literal for the source engine.
-
-        Returns:
-            A WHERE clause string like "updated_at > TO_TIMESTAMP('...')"
-            or None if no watermark can be resolved.
-        """
-        from dvt.extraction.watermark_formatter import format_watermark
-
-        unique_key = model.config.get("unique_key")
-        if not unique_key:
-            return None
-
-        # Try to find an update_key column — common patterns
-        # Look for columns named updated_at, modified_at, _updated_at, etc.
-        # In the compiled SQL for hints
         compiled = getattr(model, "compiled_code", "") or ""
+
+        # Find update_key column from common patterns
         update_key = None
         for candidate in [
             "updated_at",
@@ -442,40 +346,27 @@ class DvtModelRunner(ModelRunner):
             "_updated_at",
             "last_modified",
             "update_date",
+            "modified_date",
+            "created_at",
+            "loaded_at",
         ]:
             if candidate in compiled.lower():
                 update_key = candidate
                 break
 
         if not update_key:
-            # No recognizable update key — Sling will do full merge on primary_key
-            return None
+            return None, None
 
-        # Query target for max watermark
         try:
-            target_table = (
-                f"{model.schema}.{model.name}" if model.schema else model.name
-            )
+            target_table = self._model_table_name(model)
             sql = f"SELECT MAX({update_key}) FROM {target_table}"
             _, result = self.adapter.execute(sql, fetch=True)
             if result and len(result) > 0 and result[0][0] is not None:
-                watermark_value = result[0][0]
-            else:
-                return None  # No data on target yet — full load
+                return result[0][0], update_key
         except Exception:
-            return None  # Table doesn't exist yet — full load
+            pass
 
-        # Format for source dialect
-        source_config = self._get_output_config(source_connection)
-        source_type = source_config.get("type", "")
-
-        formatted = format_watermark(
-            value=watermark_value,
-            source_type=source_type,
-            column_type="timestamp",
-        )
-
-        return f"{update_key} > {formatted}"
+        return None, None
 
     def _model_table_name(self, model) -> str:
         """Get the fully-qualified target table name for a model."""

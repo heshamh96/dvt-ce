@@ -164,10 +164,9 @@ class SlingClient:
         source_query: str,
         target_table: str,
         mode: str = "full-refresh",
+        primary_key: Optional[List[str]] = None,
     ) -> Dict[str, Any]:
         """Load data from DuckDB into the target via Sling.
-
-        Used after DuckDB Compute processes multi-source model SQL.
 
         Args:
             duckdb_path: Path to the DuckDB database file.
@@ -175,6 +174,7 @@ class SlingClient:
             source_query: SQL query to run in DuckDB for the result set.
             target_table: Fully-qualified target table name.
             mode: Sling mode for the target write.
+            primary_key: Column(s) for merge in incremental mode.
 
         Returns:
             Dict with execution results.
@@ -186,8 +186,12 @@ class SlingClient:
 
         logger.info(
             f"DuckDB → Sling: duckdb → "
-            f"{target_config.get('type', '?')} [{target_table}]"
+            f"{target_config.get('type', '?')} [{target_table}] mode={mode}"
         )
+
+        stream_config = {"object": target_table, "mode": mode}
+        if primary_key:
+            stream_config["primary_key"] = primary_key
 
         replication = self._Replication(
             source=src_url,
@@ -195,8 +199,7 @@ class SlingClient:
             streams={
                 f"custom_sql": self._ReplicationStream(
                     sql=source_query,
-                    object=target_table,
-                    mode=mode,
+                    **stream_config,
                 ),
             },
         )
