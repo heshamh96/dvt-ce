@@ -209,10 +209,10 @@ def test(ctx, **kwargs):
 @requires.runtime_config
 @requires.manifest
 def seed(ctx, **kwargs):
-    """Load data from csv files into your data warehouse."""
-    from dbt.task.seed import SeedTask
+    """Load data from csv files into your data warehouse via Sling."""
+    from dvt.tasks.seed import DvtSeedTask
 
-    task = SeedTask(
+    task = DvtSeedTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
         ctx.obj["manifest"],
