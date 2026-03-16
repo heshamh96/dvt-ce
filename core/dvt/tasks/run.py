@@ -75,7 +75,11 @@ class DvtRunTask(RunTask):
             1
             for r in self._resolutions.values()
             if r.execution_path
-            in (ExecutionPath.SLING_DIRECT, ExecutionPath.DUCKDB_COMPUTE)
+            in (
+                ExecutionPath.SLING_DIRECT,
+                ExecutionPath.DUCKDB_COMPUTE,
+                ExecutionPath.NON_DEFAULT_PUSHDOWN,
+            )
         )
 
         if extraction_count > 0:
@@ -103,6 +107,7 @@ class DvtRunTask(RunTask):
             if resolution.execution_path in (
                 ExecutionPath.SLING_DIRECT,
                 ExecutionPath.DUCKDB_COMPUTE,
+                ExecutionPath.NON_DEFAULT_PUSHDOWN,
             ):
                 return DvtModelRunner
 

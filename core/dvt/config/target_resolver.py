@@ -78,7 +78,14 @@ def resolve_model_path(
         model_target = cli_target
     else:
         config = getattr(model_node, "config", None)
-        model_target = getattr(config, "target", None) if config else None
+        model_target = None
+        if config:
+            # Standard attribute
+            model_target = getattr(config, "target", None)
+            # Check _extra (AdditionalPropertiesAllowed stores non-standard config here)
+            if not model_target:
+                extra = getattr(config, "_extra", {}) or {}
+                model_target = extra.get("target")
         if not model_target:
             model_target = default_target
 
