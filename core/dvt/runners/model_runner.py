@@ -353,10 +353,13 @@ class DvtModelRunner(ModelRunner):
             # Use the already-rewritten SQL for DuckDB execution
             compiled_sql = rewritten_sql
 
-            # Also rewrite {{ this }} for incremental models.
-            # {{ this }} compiles to the target table ref (e.g., "devdb"."public"."model_name").
+            # Always rewrite {{ this }} if the compiled SQL references the model itself.
+            # This handles both cases:
+            # - is_incremental=true (cache has previous result)
+            # - is_incremental=false but compiled SQL still has {{ this }} from stale partial_parse
+            # The compiled SQL references the target table (e.g., "devdb"."public"."model_name").
             # In DuckDB cache, it's __model__model_name.
-            if is_incremental:
+            if True:  # Always attempt {{ this }} rewriting
                 model_cache_table = cache.model_table_name(model.name)
                 target_table_fqn = self._model_table_name(model)
                 # Try various formats dbt might have generated for {{ this }}
@@ -384,6 +387,29 @@ class DvtModelRunner(ModelRunner):
             # ----------------------------------------------------------
             # Step 3: Execute model SQL in DuckDB + cache the result
             # ----------------------------------------------------------
+            # If the model references {{ this }} (rewritten to __model__xxx)
+            # but the cache doesn't have the model result table yet,
+            # this is a stale is_incremental() from dbt's partial_parse.
+            # Treat as first run: strip the incremental WHERE clause.
+            model_cache_table = cache.model_table_name(model.name)
+            if model_cache_table in compiled_sql and not cache.has_model_result(
+                model.name
+            ):
+                logger.info(
+                    f"DVT [{model.name}]: stale is_incremental() detected — "
+                    f"cache has no {model_cache_table}, stripping WHERE clause"
+                )
+                # Remove everything from WHERE to end if it references the cache table
+                import re
+
+                # Strip WHERE ... that references the model cache table
+                compiled_sql = re.sub(
+                    r"\bWHERE\b.*" + re.escape(model_cache_table) + r".*$",
+                    "",
+                    compiled_sql,
+                    flags=re.IGNORECASE | re.DOTALL,
+                )
+
             logger.info(f"DVT [{model.name}]: DuckDB SQL: {compiled_sql[:200]}...")
             row_count = cache.save_model_result(model.name, compiled_sql)
 
