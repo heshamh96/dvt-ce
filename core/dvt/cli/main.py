@@ -1,9 +1,9 @@
 """
 DVT CLI entry point.
 
-Mirrors dbt's CLI commands. For P0, all commands delegate to stock dbt tasks.
-Later phases will swap in DVT task subclasses (DvtRunTask, DvtBuildTask, etc.)
-for cross-engine extraction, Sling integration, and DuckDB compute.
+This module is only imported when dbt dependencies are available.
+The resilient entry point in dvt.cli.__init__ handles the broken-env case
+and falls back to a sync-only CLI.
 """
 
 import click
@@ -683,12 +683,16 @@ def freshness(ctx, **kwargs):
 
 
 # ---------------------------------------------------------------------------
-# dvt sync (DVT-SPECIFIC — new command)
+# dvt sync (DVT-SPECIFIC — works even when dbt imports are broken)
 # ---------------------------------------------------------------------------
 @cli.command("sync")
 @click.pass_context
-@global_flags
-@p.profiles_dir
+@click.option(
+    "--profiles-dir",
+    default=None,
+    type=click.Path(exists=True),
+    help="Directory containing profiles.yml.",
+)
 @click.option(
     "--skip-test",
     is_flag=True,
@@ -701,13 +705,19 @@ def freshness(ctx, **kwargs):
     default=False,
     help="Show what would be installed without installing.",
 )
-@requires.postflight
-@requires.preflight
 def sync(ctx, **kwargs):
-    """Sync DVT environment: install adapters, DuckDB extensions, and verify Sling."""
+    """Sync DVT environment: install adapters, DuckDB extensions, verify Sling, and fix conflicts."""
     from dvt.tasks.sync import DvtSyncTask
 
-    task = DvtSyncTask(ctx.obj["flags"], kwargs)
+    # Build a minimal flags-like object from kwargs (no dbt dependency)
+    class _SyncFlags:
+        pass
+
+    flags = _SyncFlags()
+    flags.PROFILES_DIR = kwargs.get("profiles_dir")
+
+    task = DvtSyncTask(flags, kwargs)
     results = task.run()
     success = task.interpret_results(results)
-    return results, success
+    if not success:
+        ctx.exit(1)
