@@ -42,13 +42,13 @@ ADAPTER_CONNECTOR_DEPS: Dict[str, List[str]] = {
     "bigquery": ["google-cloud-bigquery"],
     "redshift": ["redshift-connector"],
     "mysql": ["mysql-connector-python"],
-    "sqlserver": ["pyodbc", "dbt-fabric"],
-    "databricks": ["databricks-sql-connector", "databricks-sdk"],
+    "sqlserver": ["pyodbc", "azure-identity"],
+    "databricks": ["databricks-sql-connector", "databricks-sdk", "sqlparams"],
     "oracle": ["oracledb"],
     "trino": ["trino"],
     "clickhouse": ["clickhouse-driver"],
     "duckdb": ["duckdb"],
-    "spark": ["pyhive", "thrift"],
+    "spark": ["pyhive", "thrift", "sqlparams"],
     "fabric": ["pyodbc"],
 }
 
