@@ -77,9 +77,20 @@ class DvtModelRunner(ModelRunner):
 
         path = self._resolution.execution_path
 
-        if path in (ExecutionPath.DEFAULT_PUSHDOWN, ExecutionPath.NON_DEFAULT_PUSHDOWN):
-            logger.info(f"DVT [{model.name}]: {path.value}")
+        if path == ExecutionPath.DEFAULT_PUSHDOWN:
+            logger.info(f"DVT [{model.name}]: default_pushdown")
             return super().execute(model, manifest)
+
+        elif path == ExecutionPath.NON_DEFAULT_PUSHDOWN:
+            # Non-default target with all sources local to that target.
+            # We can't use the default adapter (wrong engine). Route through
+            # the extraction path: Sling extracts from non-default target →
+            # DuckDB → Sling loads back to the same non-default target.
+            logger.info(
+                f"DVT [{model.name}]: non_default_pushdown via extraction "
+                f"(target={self._resolution.target})"
+            )
+            return self._execute_extraction(model, manifest)
 
         elif path in (ExecutionPath.SLING_DIRECT, ExecutionPath.DUCKDB_COMPUTE):
             # Coerce view/ephemeral to table for extraction models (DVT001)
@@ -464,9 +475,28 @@ class DvtModelRunner(ModelRunner):
         return None, None
 
     def _model_table_name(self, model) -> str:
-        """Get the fully-qualified target table name for a model."""
-        if model.schema:
-            return f"{model.schema}.{model.name}"
+        """Get the fully-qualified target table name for a model.
+
+        For non-default targets, uses the schema from the target's profiles.yml
+        config instead of the model's compiled schema (which comes from the
+        default adapter).
+        """
+        schema = model.schema
+
+        # For non-default pushdown: use the target's schema from profiles.yml
+        if (
+            self._resolution
+            and self._resolution.execution_path == ExecutionPath.NON_DEFAULT_PUSHDOWN
+        ):
+            target_config = self._get_output_config(self._resolution.target)
+            target_schema = target_config.get(
+                "schema", target_config.get("database", "")
+            )
+            if target_schema:
+                schema = target_schema
+
+        if schema:
+            return f"{schema}.{model.name}"
         return model.name
 
     def _get_output_config(self, output_name: str) -> dict:
