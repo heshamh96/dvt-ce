@@ -231,6 +231,9 @@ class SlingClient:
 
         logger.info(f"Sling Seed: {csv_path} → {target_table} mode={mode}")
 
+        # The adapter already dropped the table with CASCADE before calling this.
+        # Use full-refresh to create a clean table from the CSV.
+        # All columns loaded as text (matching dbt's agate behavior).
         replication = self._Replication(
             source=f"file://.",
             target=tgt_url,
@@ -240,16 +243,8 @@ class SlingClient:
                     "empty_as_null": True,
                 },
                 "target_options": {
-                    "column_casing": "source",
-                    "add_new_columns": True,
+                    "column_casing": "snake",
                 },
-            },
-            env={
-                # Force all columns to be treated as text/varchar to match
-                # dbt's agate loader behavior. Prevents type inference failures
-                # on dirty CSV data (e.g., "1.25%", "_4").
-                "SLING_LOADED_AT_COLUMN": "false",
-                "SLING_CLI_ARGS": '--src-options \'{"columns": {"*": "text"}}\'',
             },
             streams={
                 f"file://{csv_path}": self._ReplicationStream(

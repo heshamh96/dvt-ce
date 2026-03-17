@@ -56,20 +56,33 @@ class DvtSeedRunner(SeedRunner):
                 f"{model.schema}.{model.name}" if model.schema else model.name
             )
 
-            full_refresh = getattr(self.config.args, "FULL_REFRESH", False)
-            # Always use 'truncate' for seeds — Sling's 'full-refresh' mode
-            # has quoting issues with DROP TABLE on some engines.
-            # 'truncate' clears and reloads the data, which achieves the
-            # same result for seeds. If the table doesn't exist, Sling
-            # creates it automatically.
-            mode = "truncate"
+            # Drop the table with CASCADE first via the adapter (like dbt does).
+            # Each adapter handles engine-specific DROP syntax. CASCADE removes
+            # dependent views, foreign keys, etc.
+            try:
+                self.adapter.execute(
+                    f"DROP TABLE IF EXISTS {target_table} CASCADE",
+                    auto_begin=True,
+                )
+                self.adapter.commit_if_has_connection()
+            except Exception:
+                # Some engines don't support CASCADE — try without
+                try:
+                    self.adapter.execute(
+                        f"DROP TABLE IF EXISTS {target_table}",
+                        auto_begin=True,
+                    )
+                    self.adapter.commit_if_has_connection()
+                except Exception:
+                    pass  # Table may not exist yet — that's fine
 
+            # Load via Sling with full-refresh (creates fresh table from CSV)
             client = SlingClient()
             client.load_seed(
                 csv_path=csv_path,
                 target_config=target_config,
                 target_table=target_table,
-                mode=mode,
+                mode="full-refresh",
             )
 
             elapsed = time.time() - start
