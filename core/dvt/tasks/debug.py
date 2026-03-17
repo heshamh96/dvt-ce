@@ -78,17 +78,16 @@ class DvtDebugTask:
             status, detail, elapsed = self._test_connection(output)
             results.append((name, adapter_type, status, detail))
 
-            icon = "[OK]" if status == "ok" else "[FAILED]"
             pad = "." * max(1, 30 - len(name))
-            elapsed_str = f"{elapsed:.1f}s" if elapsed else ""
+            elapsed_str = f" ({elapsed:.1f}s)" if elapsed else ""
 
             if status == "ok":
-                print(f"    {name} {pad} {icon} ({adapter_type}, {elapsed_str})")
+                print(f"    🟩 {name} {pad} {adapter_type}{elapsed_str}")
             elif status == "skip":
-                print(f"    {name} {pad} [SKIP] ({detail})")
+                print(f"    ⬜ {name} {pad} {detail}")
             else:
-                print(f"    {name} {pad} {icon} ({adapter_type})")
-                print(f"      Error: {detail}")
+                print(f"    🟥 {name} {pad} {adapter_type}")
+                print(f"       {detail}")
                 all_ok = False
 
         print()
@@ -202,7 +201,7 @@ class DvtDebugTask:
                         ),
                     },
                 )
-                replication.run()
+                replication.run(return_output=True)
                 elapsed = time.time() - start
                 return "ok", "", elapsed
             finally:

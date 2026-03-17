@@ -35,18 +35,18 @@ from dvt.sync.sling_checker import ensure_sling
 
 def _status_icon(status: str) -> str:
     if status in ("already_installed", "installed", "verified"):
-        return "[installed]"
+        return "🟩"
     elif status == "repaired":
-        return "[repaired]"
+        return "🟩 (repaired)"
     elif status == "failed":
-        return "[FAILED]"
+        return "🟥"
     elif status == "dry_run":
-        return "[dry-run]"
+        return "⬜ (dry-run)"
     elif status == "removed":
-        return "[removed]"
+        return "🟩 (removed)"
     elif status == "not_found":
-        return "[NOT FOUND]"
-    return f"[{status}]"
+        return "🟥 (not found)"
+    return f"⬜ ({status})"
 
 
 def _check_adapter_importable(adapter_type: str) -> bool:
