@@ -142,8 +142,10 @@ class SlingClient:
                 # Clean up the line
                 line = line.replace("fatal:", "").replace("~ ", "").strip()
                 if line:
-                    return f"Sling error: {line}. See logs/dvt.log for details."
-        return f"Sling command failed. See logs/dvt.log for details."
+                    return (
+                        f"DVT extraction error: {line}. See logs/dvt.log for details."
+                    )
+        return f"DVT extraction failed. See logs/dvt.log for details."
 
     def extract_to_target(
         self,

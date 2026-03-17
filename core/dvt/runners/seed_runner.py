@@ -86,7 +86,7 @@ class DvtSeedRunner(SeedRunner):
             )
 
             elapsed = time.time() - start
-            msg = f"Sling Seed → {target_table}"
+            msg = f"INSERT {target_table}"
             logger.info(f"DVT [{model.name}]: {msg} ({elapsed:.2f}s)")
 
             return RunResult(
