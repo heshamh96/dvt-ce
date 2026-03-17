@@ -95,36 +95,34 @@ From `hesham_tests/Feedback_v1/design_and_branding_feedback.md`:
 
 ## UPCOMING PHASES
 
-### Phase 10: UX/Branding Overhaul [NEXT — HIGH PRIORITY]
+### Phase 10: Seed Robustness + Full DAG [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P10.1: Adapter DROP CASCADE before Sling seed | DONE | Adapter drops table with CASCADE (removes dependent views), then Sling full-refresh creates clean table. |
+| P10.2: Snake_case column normalization | DONE | `column_casing: snake` in Sling. CSV `Customer Code` → `customer_code` in DB. |
+| P10.3: adjust_column_type for type inference | DONE | Sling auto-fixes type inference failures. Dirty CSV data loads correctly. |
+| P10.4: SLING_LOADED_AT_COLUMN=false globally | DONE | No `_sling_loaded_at` metadata column on any engine (prevents Oracle CLOB issues). |
+| P10.5: Cross-target seeding | DONE | Tested: pg_dev, pg_docker, mysql, oracle, mssql, mariadb, snowflake, databricks (all PASS). |
+| P10.6: Large seed performance | DONE | 1M rows: 136K r/s (PG local), 19K r/s (Snowflake), 18K r/s (Databricks). |
+| P10.7: Fix Coke_DB models | DONE | Snake_case columns, amount > '20' (string comparison), backtick→DuckDB, adapter.quote→lowercase, f_country cache naming, non-default target schema. |
+| P10.8: Full DAG run | DONE | Trial 20: 65/68 PASS (then 68/68 after b_f_dept_acct_officer fix). |
+
+### Phase 11: UX/Branding Overhaul [NEXT — HIGH PRIORITY]
 
 Sling is an implementation detail. The user should NEVER see it.
+Each UX item gets its own git commit (easy to revert).
 
 | Item | Priority | Details |
 |------|----------|---------|
-| P10.1: Suppress Sling stdout/stderr | CRITICAL | Redirect all Sling subprocess output to /dev/null or capture and log at DEBUG level only. ALL dvt commands (run, seed, debug, show) should produce clean, dbt-like output. |
-| P10.2: dvt --version rebranding | HIGH | Replace dbt-core version check with DVT-only output. Show dvt-ce version + dvt-adapters version. No PyPI update check against dbt-core. Link to github.com/heshamh96/dvt-ce. |
-| P10.3: dvt debug clean output | HIGH | 🟩 `[OK]` / 🟥 `[FAIL]` per connection. No Sling URLs, no temp paths, no CLI banners. Suppress adapter import warnings (oracle thin mode, thrift SSL). |
-| P10.4: dvt sync clean output | HIGH | 🟩/🟥 symbols. Suppress adapter warnings. |
-| P10.5: dvt seed clean output | HIGH | dbt-style output only. Suppress Sling. On error: clean DVT error message. |
-| P10.6: dvt run clean output | CRITICAL | Black-box extraction path. Suppress ALL Sling/DuckDB output. dbt-style model output only. |
-| P10.7: --target adapter type warning | MEDIUM | DVT007 warning when --target changes adapter type. |
-
-### Phase 11: Seed Robustness
-
-| Item | Priority | Details |
-|------|----------|---------|
-| P11.1: Type inference fix | HIGH | Default to text/varchar for all CSV columns (like dbt's agate). Or pass `adjust_column_type: true` to Sling. Dirty CSV data ("1.25%", "_4") must not crash seeding. |
-| P11.2: Seed --target cross-engine | HIGH | Verify seeding works across all engine targets. Tested: pg, mysql, oracle, mssql, mariadb, snowflake, databricks. |
-| P11.3: Large seed performance | MEDIUM | Verify streaming + low memory footprint for 1M+ row CSVs across all targets. |
-
-### Phase 12: Full DAG Testing (Trial 20 Fixes)
-
-| Item | Priority | Details |
-|------|----------|---------|
-| P12.1: Fix Coke_DB seeds | HIGH | Fix dirty CSV data (customers_db_1/2 Discount column, transactions_a Day column). |
-| P12.2: Fix Coke_DB models | HIGH | Review all 68 models. Fix syntax errors for their intended targets. Ensure sources match. |
-| P12.3: Verify pg_dev vs pg_docker | HIGH | Default target is `pg_dev` (port 5433). Many models use `pg_docker` (port 5432) sources. Ensure seeds are loaded to the right target. |
-| P12.4: Full DAG run with clean data | HIGH | Re-run all 68 models after fixing seeds and models. Target: 0 errors. |
+| P11.1: Suppress Sling in `dvt run` | CRITICAL | Capture Sling stdout/stderr → `logs/dvt.log`. Show only dbt-like one-line output per model. The extraction path (source→Sling→DuckDB→Sling→target) is a black box. `dvt run -d` (debug mode) shows Sling on terminal. |
+| P11.2: Suppress Sling in `dvt seed` | CRITICAL | Same treatment as run. Show only dbt-like "OK loaded seed file" per seed. Sling details in `logs/dvt.log`. |
+| P11.3: `logs/dvt.log` for Sling details | HIGH | Separate log file for Sling/DuckDB extraction details. Not in `logs/dbt.log`. |
+| P11.4: Clean error messages | HIGH | On failure: DVT error code + short message + "see logs/dvt.log for details". No raw Sling errors on terminal. |
+| P11.5: `dvt --version` rebranding | HIGH | Show dvt-ce version + dvt-adapters version. No "dbt-core out of date". Link to github.com/heshamh96/dvt-ce. |
+| P11.6: `dvt debug` emoji formatting | MEDIUM | 🟩 `[OK]` / 🟥 `[FAIL]`. Keep Sling as connection tester but suppress its output. |
+| P11.7: `dvt sync` emoji formatting | MEDIUM | 🟩/🟥 symbols. Suppress adapter import warnings. |
+| P11.8: --target adapter type warning | MEDIUM | DVT007 warning when --target changes adapter type. |
 
 ### Phase 13: README + Documentation
 
