@@ -24,6 +24,27 @@ from dbt.cli import requires
 from dbt.cli.main import global_flags
 
 
+def _dvt_get_version_information():
+    """DVT version output — replaces dbt's version display."""
+    import dvt
+
+    dvt_version = getattr(dvt, "__version__", "unknown")
+    try:
+        import importlib.metadata as meta
+
+        adapters_version = meta.version("dvt-adapters")
+    except Exception:
+        adapters_version = "unknown"
+    return "\n".join(
+        [
+            f"dvt-ce:       {dvt_version}",
+            f"dvt-adapters: {adapters_version}",
+            "",
+            "https://github.com/heshamh96/dvt-ce",
+        ]
+    )
+
+
 # ---------------------------------------------------------------------------
 # dvt (root group)
 # ---------------------------------------------------------------------------
