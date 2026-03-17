@@ -234,10 +234,28 @@ class SlingClient:
         replication = self._Replication(
             source=f"file://.",
             target=tgt_url,
+            defaults={
+                "source_options": {
+                    "flatten": True,
+                    "empty_as_null": True,
+                },
+                "target_options": {
+                    "column_casing": "source",
+                    "add_new_columns": True,
+                },
+            },
+            env={
+                # Force all columns to be treated as text/varchar to match
+                # dbt's agate loader behavior. Prevents type inference failures
+                # on dirty CSV data (e.g., "1.25%", "_4").
+                "SLING_LOADED_AT_COLUMN": "false",
+                "SLING_CLI_ARGS": '--src-options \'{"columns": {"*": "text"}}\'',
+            },
             streams={
                 f"file://{csv_path}": self._ReplicationStream(
                     object=target_table,
                     mode=mode,
+                    source_options={"columns": {"*": "text"}},
                 ),
             },
         )
