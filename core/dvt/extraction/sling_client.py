@@ -233,7 +233,8 @@ class SlingClient:
 
         # The adapter already dropped the table with CASCADE before calling this.
         # Use full-refresh to create a clean table from the CSV.
-        # All columns loaded as text (matching dbt's agate behavior).
+        # Sling infers types from CSV content. adjust_column_type handles
+        # cases where inference is wrong (e.g., "1.25%" initially typed as double).
         replication = self._Replication(
             source=f"file://.",
             target=tgt_url,
@@ -244,13 +245,13 @@ class SlingClient:
                 },
                 "target_options": {
                     "column_casing": "snake",
+                    "adjust_column_type": True,
                 },
             },
             streams={
                 f"file://{csv_path}": self._ReplicationStream(
                     object=target_table,
                     mode=mode,
-                    source_options={"columns": {"*": "text"}},
                 ),
             },
         )
