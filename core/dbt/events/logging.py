@@ -59,7 +59,9 @@ def _get_logfile_config(
     )
 
 
-def _logfile_filter(log_cache_events: bool, line_format: LineFormat, msg: EventMsg) -> bool:
+def _logfile_filter(
+    log_cache_events: bool, line_format: LineFormat, msg: EventMsg
+) -> bool:
     return msg.info.code not in _NOFILE_CODES and not (
         msg.info.name in ["CacheAction", "CacheDumpGraph"] and not log_cache_events
     )
@@ -77,7 +79,9 @@ def setup_event_logger(flags, callbacks: List[Callable[[EventMsg], None]] = []) 
         log_level = (
             EventLevel.ERROR
             if flags.QUIET
-            else EventLevel.DEBUG if flags.DEBUG else EventLevel(flags.LOG_LEVEL)
+            else EventLevel.DEBUG
+            if flags.DEBUG
+            else EventLevel(flags.LOG_LEVEL)
         )
         console_config = get_stdout_config(
             line_format,
@@ -94,9 +98,13 @@ def setup_event_logger(flags, callbacks: List[Callable[[EventMsg], None]] = []) 
 
     if flags.LOG_LEVEL_FILE != "none":
         # create and add the file logger to the event manager
-        log_file = os.path.join(flags.LOG_PATH, "dbt.log")
-        log_file_format = _line_format_from_str(flags.LOG_FORMAT_FILE, LineFormat.DebugText)
-        log_level_file = EventLevel.DEBUG if flags.DEBUG else EventLevel(flags.LOG_LEVEL_FILE)
+        log_file = os.path.join(flags.LOG_PATH, "dvt.log")
+        log_file_format = _line_format_from_str(
+            flags.LOG_FORMAT_FILE, LineFormat.DebugText
+        )
+        log_level_file = (
+            EventLevel.DEBUG if flags.DEBUG else EventLevel(flags.LOG_LEVEL_FILE)
+        )
         add_logger_to_manager(
             _get_logfile_config(
                 log_file,
