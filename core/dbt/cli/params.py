@@ -163,7 +163,9 @@ indirect_selection = click.option(
     "--indirect-selection",
     envvar="DBT_INDIRECT_SELECTION",
     help="Choose which tests to select that are adjacent to selected resources. Eager is most inclusive, cautious is most exclusive, and buildable is in between. Empty includes no tests at all.",
-    type=click.Choice(["eager", "cautious", "buildable", "empty"], case_sensitive=False),
+    type=click.Choice(
+        ["eager", "cautious", "buildable", "empty"], case_sensitive=False
+    ),
     default="eager",
 )
 
@@ -682,7 +684,19 @@ vars = click.option(
 def _version_callback(ctx, _param, value):
     if not value or ctx.resilient_parsing:
         return
-    click.echo(get_version_information())
+    import dvt
+
+    dvt_version = getattr(dvt, "__version__", "unknown")
+    try:
+        import importlib.metadata as meta
+
+        adapters_version = meta.version("dvt-adapters")
+    except Exception:
+        adapters_version = "unknown"
+    click.echo(f"dvt-ce:       {dvt_version}")
+    click.echo(f"dvt-adapters: {adapters_version}")
+    click.echo()
+    click.echo("https://github.com/heshamh96/dvt-ce")
     ctx.exit()
 
 

@@ -448,7 +448,7 @@ class DvtModelRunner(ModelRunner):
 
             elapsed = time.time() - start
             incr_label = " (incremental)" if is_incremental else ""
-            msg = f"DuckDB Cache → {target_table} ({row_count} rows{incr_label})"
+            msg = f"SELECT {row_count}{incr_label}"
             return _make_run_result(model, RunStatus.Success, msg, elapsed, row_count)
 
         except Exception as e:
