@@ -509,11 +509,10 @@ class DvtModelRunner(ModelRunner):
         """
         schema = model.schema
 
-        # For non-default pushdown: use the target's schema from profiles.yml
-        if (
-            self._resolution
-            and self._resolution.execution_path == ExecutionPath.NON_DEFAULT_PUSHDOWN
-        ):
+        # For any model targeting a non-default target: use the target's schema
+        # from profiles.yml. The default adapter compiles schema as 'public' (PG),
+        # but MSSQL uses 'dbo', Oracle uses 'SYSTEM', etc.
+        if self._resolution and self._resolution.target != self.config.target_name:
             target_config = self._get_output_config(self._resolution.target)
             target_schema = target_config.get(
                 "schema", target_config.get("database", "")
