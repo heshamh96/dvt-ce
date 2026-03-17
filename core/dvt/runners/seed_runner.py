@@ -78,15 +78,16 @@ class DvtSeedRunner(SeedRunner):
 
             # Load via Sling with full-refresh (creates fresh table from CSV)
             client = SlingClient()
-            client.load_seed(
+            result = client.load_seed(
                 csv_path=csv_path,
                 target_config=target_config,
                 target_table=target_table,
                 mode="full-refresh",
             )
+            rows = result.get("rows", 0)
 
             elapsed = time.time() - start
-            msg = f"INSERT {target_table}"
+            msg = f"INSERT {rows}"
             logger.info(f"DVT [{model.name}]: {msg} ({elapsed:.2f}s)")
 
             return RunResult(

@@ -64,31 +64,37 @@ class SlingClient:
                 "Run 'dvt sync' or install Sling manually."
             )
 
-    def _run_replication(self, replication) -> None:
-        """Run a Sling replication, capturing output to logs/dvt.log.
+    def _run_replication(self, replication) -> int:
+        """Run a Sling replication, capturing output to dvt.log.
 
-        In normal mode: stdout/stderr is captured and written to dvt.log.
-        In debug mode (DVT_DEBUG=1 or -d flag): output also goes to terminal.
-        On failure: raises with a clean DVT error message.
+        Returns the number of rows transferred (parsed from Sling output).
+        In debug mode (DBT_DEBUG=1): output also logged at DEBUG level.
+        On failure: raises with a clean error message.
         """
         import os
+        import re
 
         debug_mode = os.environ.get("DBT_DEBUG", "").lower() in ("1", "true")
 
         try:
             output = replication.run(return_output=True, env=self.SLING_ENV)
 
-            # Log details to dvt.log (via Python logger → dbt event system)
+            rows = 0
             if output:
                 for line in output.strip().split("\n"):
                     if line.strip():
                         logger.debug(line)
+                    # Parse row count from Sling output: "inserted 469 rows" or "wrote 5 rows"
+                    match = re.search(r"(?:inserted|wrote)\s+(\d+)\s+rows", line)
+                    if match:
+                        rows = int(match.group(1))
+
+            return rows
 
         except Exception as e:
             error_msg = str(e)
             logger.debug(f"Sling error details: {error_msg}")
 
-            # Raise clean error (strip ANSI codes and verbose output)
             clean_msg = self._clean_sling_error(error_msg)
             raise RuntimeError(clean_msg) from None
 
@@ -324,9 +330,14 @@ class SlingClient:
                 ),
             },
         )
-        self._run_replication(replication)
+        rows = self._run_replication(replication)
 
-        return {"status": "success", "target_table": target_table, "csv": csv_path}
+        return {
+            "status": "success",
+            "target_table": target_table,
+            "csv": csv_path,
+            "rows": rows,
+        }
 
     def load_cross_target(
         self,
