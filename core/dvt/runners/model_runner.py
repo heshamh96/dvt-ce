@@ -374,9 +374,9 @@ class DvtModelRunner(ModelRunner):
                 if model.schema:
                     this_candidates.append(f'"{model.schema}"."{model.name}"')
                     this_candidates.append(f"{model.schema}.{model.name}")
-                this_candidates.append(f'"{model.name}"')
-                this_candidates.append(model.name)
-
+                # Only use qualified names (schema.name) for {{ this }} replacement.
+                # The bare model name can match inside other identifiers
+                # (e.g., "f_country" inside "cbs_f_country") causing corruption.
                 for candidate in this_candidates:
                     if candidate in compiled_sql:
                         compiled_sql = compiled_sql.replace(

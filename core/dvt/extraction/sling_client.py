@@ -24,6 +24,13 @@ class SlingClient:
     is not installed (the sling Python package tries to download it on import).
     """
 
+    # Disable _sling_loaded_at metadata column globally.
+    # This column causes CLOB issues on Oracle and adds unnecessary
+    # metadata to tables. DVT manages its own state via DuckDB cache.
+    SLING_ENV = {
+        "SLING_LOADED_AT_COLUMN": "false",
+    }
+
     def __init__(self) -> None:
         self._Replication = None
         self._ReplicationStream = None
@@ -99,6 +106,7 @@ class SlingClient:
         )
 
         replication = self._Replication(
+            env=self.SLING_ENV,
             source=src_url,
             target=tgt_url,
             streams={
@@ -143,6 +151,7 @@ class SlingClient:
         )
 
         replication = self._Replication(
+            env=self.SLING_ENV,
             source=src_url,
             target=tgt_url,
             streams={
@@ -194,6 +203,7 @@ class SlingClient:
             stream_config["primary_key"] = primary_key
 
         replication = self._Replication(
+            env=self.SLING_ENV,
             source=src_url,
             target=tgt_url,
             streams={
@@ -236,6 +246,7 @@ class SlingClient:
         # Sling infers types from CSV content. adjust_column_type handles
         # cases where inference is wrong (e.g., "1.25%" initially typed as double).
         replication = self._Replication(
+            env=self.SLING_ENV,
             source=f"file://.",
             target=tgt_url,
             defaults={
@@ -248,6 +259,7 @@ class SlingClient:
                     "adjust_column_type": True,
                 },
             },
+
             streams={
                 f"file://{csv_path}": self._ReplicationStream(
                     object=target_table,
@@ -301,6 +313,7 @@ class SlingClient:
         )
 
         replication = self._Replication(
+            env=self.SLING_ENV,
             source=src_url,
             target=tgt_url,
             streams={
