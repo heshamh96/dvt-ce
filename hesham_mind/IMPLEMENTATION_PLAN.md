@@ -108,21 +108,22 @@ From `hesham_tests/Feedback_v1/design_and_branding_feedback.md`:
 | P10.7: Fix Coke_DB models | DONE | Snake_case columns, amount > '20' (string comparison), backtick→DuckDB, adapter.quote→lowercase, f_country cache naming, non-default target schema. |
 | P10.8: Full DAG run | DONE | Trial 20: 65/68 PASS (then 68/68 after b_f_dept_acct_officer fix). |
 
-### Phase 11: UX/Branding Overhaul [NEXT — HIGH PRIORITY]
+### Phase 11: UX/Branding Overhaul [DONE]
 
-Sling is an implementation detail. The user should NEVER see it.
-Each UX item gets its own git commit (easy to revert).
+Sling is invisible. No mention of Sling or DuckDB in user-facing output.
+Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 
-| Item | Priority | Details |
-|------|----------|---------|
-| P11.1: Suppress Sling in `dvt run` | CRITICAL | Capture Sling stdout/stderr → `logs/dvt.log`. Show only dbt-like one-line output per model. The extraction path (source→Sling→DuckDB→Sling→target) is a black box. `dvt run -d` (debug mode) shows Sling on terminal. |
-| P11.2: Suppress Sling in `dvt seed` | CRITICAL | Same treatment as run. Show only dbt-like "OK loaded seed file" per seed. Sling details in `logs/dvt.log`. |
-| P11.3: `logs/dvt.log` for Sling details | HIGH | Separate log file for Sling/DuckDB extraction details. Not in `logs/dbt.log`. |
-| P11.4: Clean error messages | HIGH | On failure: DVT error code + short message + "see logs/dvt.log for details". No raw Sling errors on terminal. |
-| P11.5: `dvt --version` rebranding | HIGH | Show dvt-ce version + dvt-adapters version. No "dbt-core out of date". Link to github.com/heshamh96/dvt-ce. |
-| P11.6: `dvt debug` emoji formatting | MEDIUM | 🟩 `[OK]` / 🟥 `[FAIL]`. Keep Sling as connection tester but suppress its output. |
-| P11.7: `dvt sync` emoji formatting | MEDIUM | 🟩/🟥 symbols. Suppress adapter import warnings. |
-| P11.8: --target adapter type warning | MEDIUM | DVT007 warning when --target changes adapter type. |
+| Item | Status | Details |
+|------|--------|---------|
+| P11.1: Suppress Sling in `dvt run` | DONE | `return_output=True` captures Sling output. One dbt-like line per model: `[SELECT 4 in 6s]`. |
+| P11.2: Suppress Sling in `dvt seed` | DONE | Same treatment. One line per seed: `[INSERT 469 in 3s]`. |
+| P11.3: `logs/dvt.log` | DONE | Renamed `dbt.log` → `dvt.log`. All details (Sling, debug) in one file. |
+| P11.4: Clean error messages | DONE | `Model 'name' (target: x, adapter: y): error. Check logs/dvt.log.` |
+| P11.5: `dvt --version` | DONE | Shows `dvt-ce: 0.1.5`, `dvt-adapters: 0.2.1`, GitHub link. No dbt branding. |
+| P11.6: `dvt debug` emoji | DONE | 🟩/🟥 per connection. Sling output suppressed. |
+| P11.7: `dvt sync` emoji | DONE | 🟩/🟥 per adapter/extension. |
+| P11.8: DVT007 `--target` warning | DONE | Warns when adapter type changes. |
+| P11.9: Row counts in output | DONE | Seeds show `INSERT N`, extraction shows `SELECT N`. |
 
 ### Phase 13: README + Documentation
 
