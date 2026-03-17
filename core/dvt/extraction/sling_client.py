@@ -64,6 +64,87 @@ class SlingClient:
                 "Run 'dvt sync' or install Sling manually."
             )
 
+    def _run_replication(self, replication) -> None:
+        """Run a Sling replication, capturing output to logs/dvt.log.
+
+        In normal mode: stdout/stderr is captured and written to dvt.log.
+        In debug mode (DVT_DEBUG=1 or -d flag): output also goes to terminal.
+        On failure: raises with a clean DVT error message.
+        """
+        import os
+
+        debug_mode = os.environ.get("DBT_DEBUG", "").lower() in ("1", "true")
+
+        try:
+            output = replication.run(return_output=True, env=self.SLING_ENV)
+
+            # Write to logs/dvt.log
+            self._write_dvt_log(output or "")
+
+            # In debug mode, also print to terminal
+            if debug_mode and output:
+                for line in output.strip().split("\n"):
+                    logger.debug(f"[sling] {line}")
+
+        except Exception as e:
+            error_msg = str(e)
+            # Write full error to dvt.log
+            self._write_dvt_log(f"ERROR: {error_msg}")
+
+            # Raise clean error (strip Sling ANSI codes and verbose output)
+            clean_msg = self._clean_sling_error(error_msg)
+            raise RuntimeError(clean_msg) from None
+
+    @staticmethod
+    def _write_dvt_log(content: str) -> None:
+        """Append content to logs/dvt.log."""
+        import os
+
+        project_dir = os.environ.get("DBT_PROJECT_DIR", os.getcwd())
+        log_dir = os.path.join(project_dir, "logs")
+        os.makedirs(log_dir, exist_ok=True)
+        log_path = os.path.join(log_dir, "dvt.log")
+        try:
+            from datetime import datetime
+
+            ts = datetime.now().strftime("%H:%M:%S")
+            with open(log_path, "a") as f:
+                for line in content.strip().split("\n"):
+                    if line.strip():
+                        f.write(f"[{ts}] {line}\n")
+        except Exception:
+            pass
+
+    @staticmethod
+    def _clean_sling_error(error_msg: str) -> str:
+        """Extract a clean error message from Sling's verbose output."""
+        import re
+
+        # Strip ANSI escape codes
+        clean = re.sub(r"\x1b\[[0-9;]*m", "", error_msg)
+        # Find the most useful error line
+        for line in clean.split("\n"):
+            line = line.strip()
+            if not line:
+                continue
+            # Skip Sling banner lines
+            if (
+                "Sling CLI" in line
+                or "slingdata.io" in line
+                or "config file for" in line
+            ):
+                continue
+            if (
+                "fatal:" in line.lower()
+                or "error" in line.lower()
+                or "sql error" in line.lower()
+            ):
+                # Clean up the line
+                line = line.replace("fatal:", "").replace("~ ", "").strip()
+                if line:
+                    return f"Sling error: {line}. See logs/dvt.log for details."
+        return f"Sling command failed. See logs/dvt.log for details."
+
     def extract_to_target(
         self,
         source_config: Dict[str, Any],
@@ -116,7 +197,7 @@ class SlingClient:
                 ),
             },
         )
-        replication.run()
+        self._run_replication(replication)
 
         return {"status": "success", "target_table": target_table, "mode": mode}
 
@@ -162,7 +243,7 @@ class SlingClient:
                 ),
             },
         )
-        replication.run()
+        self._run_replication(replication)
 
         return {"status": "success", "duckdb_table": duckdb_table}
 
@@ -213,7 +294,7 @@ class SlingClient:
                 ),
             },
         )
-        replication.run()
+        self._run_replication(replication)
 
         return {"status": "success", "target_table": target_table}
 
@@ -259,7 +340,6 @@ class SlingClient:
                     "adjust_column_type": True,
                 },
             },
-
             streams={
                 f"file://{csv_path}": self._ReplicationStream(
                     object=target_table,
@@ -267,7 +347,7 @@ class SlingClient:
                 ),
             },
         )
-        replication.run()
+        self._run_replication(replication)
 
         return {"status": "success", "target_table": target_table, "csv": csv_path}
 
@@ -320,6 +400,6 @@ class SlingClient:
                 source_table: self._ReplicationStream(**stream_kwargs),
             },
         )
-        replication.run()
+        self._run_replication(replication)
 
         return {"status": "success", "target_table": target_table}
