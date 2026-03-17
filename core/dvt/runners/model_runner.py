@@ -149,8 +149,21 @@ class DvtModelRunner(ModelRunner):
 
         except Exception as e:
             elapsed = time.time() - start
-            logger.error(f"DVT [{model.name}]: extraction failed: {e}")
-            return _make_run_result(model, RunStatus.Error, str(e), elapsed)
+            error_detail = str(e)
+            target_name = resolution.target if resolution else "unknown"
+            target_type = ""
+            try:
+                tc = self._get_output_config(target_name)
+                target_type = tc.get("type", "")
+            except Exception:
+                pass
+            error_msg = (
+                f"Model '{model.name}' (target: {target_name}, adapter: {target_type}): "
+                f"{error_detail}\n"
+                f"    Check logs/dvt.log for full details."
+            )
+            logger.error(error_msg)
+            return _make_run_result(model, RunStatus.Error, error_msg, elapsed)
 
     def _execute_extraction_locked(
         self, model, manifest, resolution, client, cache
@@ -453,8 +466,21 @@ class DvtModelRunner(ModelRunner):
 
         except Exception as e:
             elapsed = time.time() - start
-            logger.error(f"DVT [{model.name}]: extraction failed: {e}")
-            return _make_run_result(model, RunStatus.Error, str(e), elapsed)
+            error_detail = str(e)
+            target_name = resolution.target if resolution else "unknown"
+            target_type = ""
+            try:
+                tc = self._get_output_config(target_name)
+                target_type = tc.get("type", "")
+            except Exception:
+                pass
+            error_msg = (
+                f"Model '{model.name}' (target: {target_name}, adapter: {target_type}): "
+                f"{error_detail}\n"
+                f"    Check logs/dvt.log for full details."
+            )
+            logger.error(error_msg)
+            return _make_run_result(model, RunStatus.Error, error_msg, elapsed)
 
     # ------------------------------------------------------------------
     # Helpers

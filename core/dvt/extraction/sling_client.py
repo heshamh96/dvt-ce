@@ -78,42 +78,19 @@ class SlingClient:
         try:
             output = replication.run(return_output=True, env=self.SLING_ENV)
 
-            # Write to logs/dvt.log
-            self._write_dvt_log(output or "")
-
-            # In debug mode, also print to terminal
-            if debug_mode and output:
+            # Log details to dvt.log (via Python logger → dbt event system)
+            if output:
                 for line in output.strip().split("\n"):
-                    logger.debug(f"[sling] {line}")
+                    if line.strip():
+                        logger.debug(line)
 
         except Exception as e:
             error_msg = str(e)
-            # Write full error to dvt.log
-            self._write_dvt_log(f"ERROR: {error_msg}")
+            logger.debug(f"Sling error details: {error_msg}")
 
-            # Raise clean error (strip Sling ANSI codes and verbose output)
+            # Raise clean error (strip ANSI codes and verbose output)
             clean_msg = self._clean_sling_error(error_msg)
             raise RuntimeError(clean_msg) from None
-
-    @staticmethod
-    def _write_dvt_log(content: str) -> None:
-        """Append content to logs/dvt.log."""
-        import os
-
-        project_dir = os.environ.get("DBT_PROJECT_DIR", os.getcwd())
-        log_dir = os.path.join(project_dir, "logs")
-        os.makedirs(log_dir, exist_ok=True)
-        log_path = os.path.join(log_dir, "dvt.log")
-        try:
-            from datetime import datetime
-
-            ts = datetime.now().strftime("%H:%M:%S")
-            with open(log_path, "a") as f:
-                for line in content.strip().split("\n"):
-                    if line.strip():
-                        f.write(f"[{ts}] {line}\n")
-        except Exception:
-            pass
 
     @staticmethod
     def _clean_sling_error(error_msg: str) -> str:
@@ -142,10 +119,8 @@ class SlingClient:
                 # Clean up the line
                 line = line.replace("fatal:", "").replace("~ ", "").strip()
                 if line:
-                    return (
-                        f"DVT extraction error: {line}. See logs/dvt.log for details."
-                    )
-        return f"DVT extraction failed. See logs/dvt.log for details."
+                    return f"{line}"
+        return "extraction failed"
 
     def extract_to_target(
         self,
