@@ -64,8 +64,37 @@ class DvtRunTask(RunTask):
         self._source_connections = load_source_connections(project_dir)
 
         # Resolve
-        default_target = self.config.target_name
-        cli_target = getattr(self.args, "TARGET", None)
+        # default_target comes from profiles.yml "target:" field
+        # self.config.target_name may differ if --target was passed
+        profiles_default = None
+        if self._raw_profiles:
+            for pname, pdata in self._raw_profiles.items():
+                if isinstance(pdata, dict) and "target" in pdata:
+                    profiles_default = pdata["target"]
+                    break
+        default_target = profiles_default or self.config.target_name
+        active_target = self.config.target_name
+        cli_target = active_target if active_target != default_target else None
+
+        # DVT007: Warn if --target changes adapter type
+        if cli_target and self._raw_profiles:
+            from dvt.sync.profiles_reader import extract_outputs
+
+            outputs = extract_outputs(self._raw_profiles)
+            output_map = {o["_name"]: o.get("type", "") for o in outputs}
+            default_type = output_map.get(default_target, "")
+            cli_type = output_map.get(cli_target, "")
+            if default_type and cli_type and default_type != cli_type:
+                import sys
+
+                print(
+                    f"\n  ⚠️  DVT007: --target '{cli_target}' uses '{cli_type}' adapter, "
+                    f"but your default target uses '{default_type}'.\n"
+                    f"     This will require you to migrate all {default_type} "
+                    f"models to {cli_type} dialect.\n",
+                    file=sys.stderr,
+                )
+
         self._resolutions = resolve_all_models(
             self.manifest, default_target, self._source_connections, cli_target
         )
