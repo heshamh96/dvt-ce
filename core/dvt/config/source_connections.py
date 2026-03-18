@@ -113,6 +113,55 @@ def _extract_connections_from_file(
             connections[source_name] = connection
 
 
+def validate_source_connections(
+    source_connections: SourceConnectionMap,
+    profiles: Dict[str, Any],
+    default_target: str,
+) -> List[str]:
+    """Validate source connections against the default target.
+
+    Returns a list of error messages. Empty list = all valid.
+
+    DVT113: Source has connection: to same adapter type as default target.
+    """
+    errors = []
+
+    # Get default target's adapter type
+    default_type = None
+    for profile_name, profile_data in profiles.items():
+        if not isinstance(profile_data, dict):
+            continue
+        outputs = profile_data.get("outputs", {})
+        if default_target in outputs:
+            default_type = outputs[default_target].get("type", "")
+            break
+
+    if not default_type:
+        return errors
+
+    # Check each source connection
+    for source_name, connection_name in source_connections.items():
+        # Find the connection's adapter type
+        conn_type = None
+        for profile_name, profile_data in profiles.items():
+            if not isinstance(profile_data, dict):
+                continue
+            outputs = profile_data.get("outputs", {})
+            if connection_name in outputs:
+                conn_type = outputs[connection_name].get("type", "")
+                break
+
+        if conn_type and conn_type == default_type:
+            errors.append(
+                f"DVT113: Source '{source_name}' has connection '{connection_name}' "
+                f"which uses the same adapter type '{conn_type}' as the default target. "
+                f"Remove the connection: property — sources on the default adapter type "
+                f"follow --target automatically."
+            )
+
+    return errors
+
+
 def get_source_connection(
     source_name: str,
     source_connections: SourceConnectionMap,

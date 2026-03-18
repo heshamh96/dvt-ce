@@ -12,7 +12,10 @@ from typing import Dict, Optional, Type
 
 from dbt.task.run import ModelRunner, RunTask
 
-from dvt.config.source_connections import load_source_connections
+from dvt.config.source_connections import (
+    load_source_connections,
+    validate_source_connections,
+)
 from dvt.config.target_resolver import (
     ExecutionPath,
     ResolvedModel,
@@ -62,6 +65,16 @@ class DvtRunTask(RunTask):
         # Read source connections
         project_dir = getattr(self.args, "PROJECT_DIR", None) or "."
         self._source_connections = load_source_connections(project_dir)
+
+        # Validate: DVT113 — source has connection: to same adapter type as default
+        if self._source_connections and self._raw_profiles:
+            errors = validate_source_connections(
+                self._source_connections, self._raw_profiles, self.config.target_name
+            )
+            for err in errors:
+                import sys
+
+                print(f"\n  ⚠️  {err}\n", file=sys.stderr)
 
         # Resolve
         # default_target comes from profiles.yml "target:" field
