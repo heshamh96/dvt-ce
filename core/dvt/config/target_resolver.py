@@ -107,10 +107,8 @@ def resolve_model_path(
         connection = source_connections.get(src_name)
 
         if not connection:
-            logger.warning(
-                f"DVT100: Source '{src_name}' has no connection property in sources.yml. "
-                f"Add 'connection: <target_name>' to the source definition."
-            )
+            # No connection: specified → source is on the default target type.
+            # Follows --target naturally, like dbt. Not remote — skip.
             continue
 
         if connection != model_target:
