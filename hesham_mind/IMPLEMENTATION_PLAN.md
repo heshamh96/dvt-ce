@@ -125,18 +125,18 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 | P11.8: DVT007 `--target` warning | DONE | Warns when adapter type changes. |
 | P11.9: Row counts in output | DONE | Seeds show `INSERT N`, extraction shows `SELECT N`. |
 
-### Phase 12: Source Connection v2 + Parse Validation [NEXT]
+### Phase 12: Source Connection v2 + Parse Validation [DONE]
 
 `connection:` is optional for sources on the default target's adapter type (backward compatible with dbt).
 
-| Item | Priority | Details |
-|------|----------|---------|
-| P12.1: `connection:` optional for default target type | HIGH | Sources on same adapter type as default target MUST NOT have `connection:`. They follow `--target` like dbt. Remove DVT100 error for missing connection when source is same type. |
-| P12.2: Parse error for same-type `connection:` (DVT113) | HIGH | If source has `connection:` pointing to same adapter type as default → parse error. Forces user to remove it. |
-| P12.3: Parse-time target change detection | MEDIUM | `dvt parse` compares current default target (type + hostname) against previous parse. Stores state in manifest. |
-| P12.4: Dialect migration warning (DVT008) | MEDIUM | Warn when adapter type changes between parses. |
-| P12.5: Instance switch warning (DVT009) | MEDIUM | Warn when same type but different hostname between parses. |
-| P12.6: Hostname field mapping per adapter | LOW | Map adapter type → hostname field (host, account, project, server). |
+| Item | Status | Details |
+|------|--------|---------|
+| P12.1: `connection:` optional for default target type | DONE | Sources without `connection:` are local (follow --target). No DVT100 error. |
+| P12.2: DVT113 same-type+host:port warning | DONE | Same adapter type AND same host:port = redundant connection. Different port = different instance (allowed). |
+| P12.3: Parse-time target change detection | DONE | `.dvt/state.json` stores last default target (name, type, hostname:port). Compared on each parse. |
+| P12.4: DVT008 dialect migration warning | DONE | Warns when adapter type changes between parses. |
+| P12.5: DVT009 instance switch warning | DONE | Warns when same type but different hostname:port. |
+| P12.6: Hostname includes port | DONE | `host:port` for postgres/mysql/oracle/etc. `account` for Snowflake. `project` for BigQuery. |
 
 ### Phase 13: dvt docs (Catalog + Cross-Engine Lineage)
 
