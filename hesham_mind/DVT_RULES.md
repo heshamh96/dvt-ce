@@ -245,34 +245,119 @@ Result:
 
 ### 3.1 Source Connection Requirements
 
-**RULE 3.1.1:** All sources **MUST** have an explicit `connection` property in `sources.yml`.
+**RULE 3.1.1:** Sources on a **different** adapter type than the default target **MUST** have `connection:` specified.
 
 ```yaml
 sources:
-  - name: crm
-    connection: source_postgres    # REQUIRED: output name from profiles.yml
+  - name: crm                     # different engine than default target
+    connection: source_postgres    # REQUIRED: different adapter type
     schema: public
     tables:
       - name: customers
       - name: orders
 ```
 
-**RULE 3.1.2:** If a source does not have a `connection` property:
-- DVT raises a **compilation error**: `"DVT100: Source '<name>' must have a 'connection' property specifying its database connection"`
-- DVT does **NOT** assume a default
+**RULE 3.1.2:** Sources on the **same** adapter type as the default target **MUST NOT** have `connection:` specified. They follow `--target` naturally, just like dbt.
 
-**RULE 3.1.3:** The `connection` value must match an output name in profiles.yml:
-- If it does not exist: DVT raises **compilation error**: `"DVT101: Source '<name>' references connection '<conn>' which does not exist in profiles.yml"`
+```yaml
+sources:
+  - name: raw_data                 # same engine as default target
+    schema: raw                    # NO connection — follows --target
+    tables:
+      - name: events
+      - name: users
+```
 
-**RULE 3.1.4:** `sources.yml` is **metadata only**. It declares:
-- What sources exist (name, tables)
-- Where they live (connection)
-- Their schema/database
-- Standard dbt source properties (descriptions, tests, freshness, columns)
+**RULE 3.1.3:** If a source has `connection:` pointing to the **same** adapter type as the default target:
+- DVT raises **parse error**: `"DVT113: Source '<name>' has connection '<conn>' which uses the same adapter type '<type>' as the default target. Remove the connection: property — sources on the default adapter type follow --target automatically."`
+- Rationale: having `connection:` on same-type sources breaks environment switching. The source would be locked to a specific connection instead of following `--target`.
 
-It does **NOT** contain any extraction config, Sling config, or data movement config.
+**RULE 3.1.4:** If `connection:` is specified, the value must match an output name in profiles.yml:
+- If not found: DVT raises **parse error**: `"DVT101: Source '<name>' references connection '<conn>' which does not exist in profiles.yml"`
 
-**Rationale:** Explicit connections let DVT automatically determine when data movement is needed. The user declares WHERE data lives; DVT handles HOW to get it.
+**RULE 3.1.5:** `sources.yml` is **metadata only**. No extraction config, no Sling config, no data movement config.
+
+**RULE 3.1.6:** ONE analytics engine per project. The default target defines the primary analytics engine. Multiple environments of that engine (dev/staging/prod) are just `--target` switches. DVT does NOT support two different analytics targets simultaneously.
+
+### 3.1.7 Environment Switching
+
+Sources without `connection:` follow `--target` naturally:
+
+```bash
+dvt run --target sf_dev     # raw_data sources → sf_dev (same Snowflake, dev database)
+dvt run --target sf_prod    # raw_data sources → sf_prod (same Snowflake, prod database)
+```
+
+Sources with `connection:` stay on their declared connection regardless of `--target`:
+
+```bash
+dvt run --target sf_dev     # crm sources → source_postgres (always, different engine)
+dvt run --target sf_prod    # crm sources → source_postgres (always, different engine)
+```
+
+### 3.1.8 Parse-Time Target Change Detection
+
+`dvt parse` detects when the default target changes between parses by comparing against the previous parse state:
+
+**Case A: Adapter type changed** (e.g., postgres → snowflake)
+- Warning: `"DVT008: Default target adapter type changed from 'postgres' to 'snowflake'. You need to migrate all pushdown models from postgres dialect to snowflake dialect."`
+
+**Case B: Same adapter type, different hostname** (e.g., Snowflake instance A → Snowflake instance B)
+- Warning: `"DVT009: Default target hostname changed from '<old_host>' to '<new_host>' (same adapter type '<type>'). If you have sources on the old instance, add connection: to those source definitions pointing to the old target."`
+- Hostname field per adapter: `host` (postgres, mysql, oracle, sqlserver), `account` (snowflake), `project` (bigquery), `host` (databricks)
+
+**Case C: Same adapter type, same hostname, different database/credentials**
+- No warning. Normal environment switching (dev → prod).
+
+### 3.1.9 Examples
+
+**Snowflake analytics with Postgres + Oracle sources:**
+```yaml
+# profiles.yml
+my_project:
+  target: sf_dev
+  outputs:
+    sf_dev:
+      type: snowflake
+      account: xyz123
+      database: ANALYTICS_DEV
+    sf_prod:
+      type: snowflake
+      account: xyz123            # same account = same instance
+      database: ANALYTICS_PROD
+    pg_source:
+      type: postgres
+      host: pg.prod.internal
+    oracle_source:
+      type: oracle
+      host: oracle.prod.internal
+
+# sources.yml
+sources:
+  - name: raw_data               # on Snowflake (same as default target)
+    schema: raw                  # NO connection — follows --target
+    tables:
+      - name: events
+
+  - name: crm                   # on Postgres (different engine)
+    connection: pg_source        # REQUIRED
+    schema: public
+    tables:
+      - name: customers
+
+  - name: erp                   # on Oracle (different engine)
+    connection: oracle_source    # REQUIRED
+    schema: SYSTEM
+    tables:
+      - name: invoices
+```
+
+```bash
+dvt run --target sf_dev   # raw_data → sf_dev, crm → pg_source, erp → oracle_source
+dvt run --target sf_prod  # raw_data → sf_prod, crm → pg_source, erp → oracle_source
+```
+
+**Rationale:** This is 100% backward compatible with dbt. A pure dbt project (single engine, no `connection:` on any source) works identically. DVT only requires `connection:` for cross-engine sources.
 
 ### 3.2 Source Resolution
 
@@ -759,9 +844,10 @@ If no extraction needed → DVT works without Sling.
 
 ### 12.2 Migration from dbt
 1. `pip install dvt-ce`
-2. Add `connection:` to sources in `sources.yml`
-3. `dvt sync` to install adapters
-4. `dvt run` — just works
+2. Sources on the default engine: no changes needed (no `connection:`)
+3. Cross-engine sources: add `connection:` pointing to their profiles.yml output
+4. `dvt sync` to install adapters
+5. `dvt run` — just works
 
 ### 12.3 Compatibility Matrix
 
@@ -789,12 +875,14 @@ If no extraction needed → DVT works without Sling.
 | DVT003 | Extraction slow | Large table full-refresh, suggest incremental |
 | DVT006 | Ephemeral multi-ref | Ephemeral referenced by multiple downstream models |
 | DVT007 | Target adapter mismatch | `--target` changes adapter type from default; pushdown models may fail |
+| DVT008 | Default target type changed | Default target adapter type changed between parses; migrate model dialects |
+| DVT009 | Default target host changed | Same adapter type but different hostname; check source connections |
 
 ### Errors
 
 | Code | Message | Trigger |
 |------|---------|---------|
-| DVT100 | Connection required | Source missing `connection` property |
+| DVT100 | Connection required | Cross-engine source missing `connection` property |
 | DVT101 | Connection not found | Source connection not in profiles.yml |
 | DVT102 | Conflicting connections | Same source, different connections |
 | DVT103 | Cross-target test | Test references multiple targets |
@@ -804,6 +892,7 @@ If no extraction needed → DVT works without Sling.
 | DVT108 | Unknown materialization | Invalid materialization type |
 | DVT109 | Watermark format error | Cannot format watermark for source dialect |
 | DVT110 | *(Removed)* | *(Ephemeral extraction models are now coerced to table with DVT001 warning)* |
+| DVT113 | Same-type connection | Source has `connection:` to same adapter type as default target; remove it |
 
 ---
 
@@ -950,7 +1039,10 @@ test-paths: ["tests"]
 | Cache strategy | **Per-source, not per-model.** `crm.orders` extracted once as `crm__orders`, shared by all models. |
 | Incremental extraction | **Fully supported.** Watermark from target, delta extraction via Sling, DuckDB cache merge, incremental load to target. |
 | User Sling configuration | **NONE.** User never configures Sling. DVT handles it. |
+| Source connection rules | Same adapter type as default → MUST NOT have `connection:` (follows --target). Different adapter type → MUST have `connection:`. |
 | Model connection config | **NONE.** No `connection` on models. Only on sources. |
+| One analytics engine | ONE primary analytics engine per project. `--target` switches environments of that engine. |
+| Environment switching | Sources without `connection:` follow `--target`. Sources with `connection:` stay fixed. |
 | Extraction config on sources | **NONE.** No `sling:` blocks. sources.yml is metadata only. |
 | Hidden staging tables | **NONE.** No `_dvt` schema. Results land directly as model tables. |
 | Extraction model SQL dialect | **DuckDB SQL.** All models with remote sources are written in DuckDB SQL. |

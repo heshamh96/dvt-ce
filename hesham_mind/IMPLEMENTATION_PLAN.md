@@ -125,31 +125,51 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 | P11.8: DVT007 `--target` warning | DONE | Warns when adapter type changes. |
 | P11.9: Row counts in output | DONE | Seeds show `INSERT N`, extraction shows `SELECT N`. |
 
-### Phase 13: README + Documentation
+### Phase 12: Source Connection v2 + Parse Validation [NEXT]
+
+`connection:` is optional for sources on the default target's adapter type (backward compatible with dbt).
 
 | Item | Priority | Details |
 |------|----------|---------|
-| P13.1: GitHub README (master branch) | HIGH | Comprehensive README for the Sling+DuckDB architecture. Not the old Spark stuff. Getting started, installation, examples, philosophy. |
-| P13.2: PyPI description | MEDIUM | Update setup.py long_description for PyPI listing. |
-| P13.3: Create README update skill | LOW | Skill that auto-generates README from hesham_mind/ docs when merging to master. |
+| P12.1: `connection:` optional for default target type | HIGH | Sources on same adapter type as default target MUST NOT have `connection:`. They follow `--target` like dbt. Remove DVT100 error for missing connection when source is same type. |
+| P12.2: Parse error for same-type `connection:` (DVT113) | HIGH | If source has `connection:` pointing to same adapter type as default → parse error. Forces user to remove it. |
+| P12.3: Parse-time target change detection | MEDIUM | `dvt parse` compares current default target (type + hostname) against previous parse. Stores state in manifest. |
+| P12.4: Dialect migration warning (DVT008) | MEDIUM | Warn when adapter type changes between parses. |
+| P12.5: Instance switch warning (DVT009) | MEDIUM | Warn when same type but different hostname between parses. |
+| P12.6: Hostname field mapping per adapter | LOW | Map adapter type → hostname field (host, account, project, server). |
 
-### Phase 14: Advanced Features
-
-| Item | Priority | Details |
-|------|----------|---------|
-| P14.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')` |
-| P14.2: CDC extraction | LOW | Sling `change-capture` mode |
-| P14.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH |
-| P14.4: `dvt docs` lineage enhancement | LOW | Show extraction paths in lineage graph |
-
-### Phase 15: Testing + Release
+### Phase 13: dvt docs (Catalog + Cross-Engine Lineage)
 
 | Item | Priority | Details |
 |------|----------|---------|
-| P15.1: Unit tests | MEDIUM | Watermark formatter, connection mapper, target resolver, optimizer |
-| P15.2: Integration test suite | MEDIUM | Automated E2E tests for all execution paths |
-| P15.3: PyPI publish (clean release) | MEDIUM | dvt-ce + dvt-adapters with all UX fixes |
-| P15.4: GitHub release notes | LOW | Changelog, migration guide from dbt |
+| P13.1: Multi-connection catalog | HIGH | `dvt docs generate` queries each source's connection for schema/column info. Not just the default adapter. |
+| P13.2: Cross-engine lineage | HIGH | Lineage graph shows which engine each source lives on. Extraction paths visible. Connection name per source node. |
+| P13.3: Connection badges in docs | MEDIUM | Each source/model shows its engine as a badge (e.g., 🐘 postgres, ❄️ snowflake). |
+
+### Phase 14: README + Documentation
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P14.1: GitHub README (master branch) | HIGH | Comprehensive README for the Sling+DuckDB architecture. Getting started, installation, examples, philosophy. |
+| P14.2: PyPI description | MEDIUM | Update setup.py long_description for PyPI listing. |
+| P14.3: Create README update skill | LOW | Auto-generates README from hesham_mind/ docs when merging to master. |
+
+### Phase 15: Advanced Features
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P15.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')` |
+| P15.2: CDC extraction | LOW | Sling `change-capture` mode |
+| P15.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH |
+
+### Phase 16: Testing + Release
+
+| Item | Priority | Details |
+|------|----------|---------|
+| P16.1: Unit tests | MEDIUM | Watermark formatter, connection mapper, target resolver, optimizer |
+| P16.2: Integration test suite | MEDIUM | Automated E2E tests for all execution paths |
+| P16.3: PyPI publish (clean release) | MEDIUM | dvt-ce + dvt-adapters with all UX fixes |
+| P16.4: GitHub release notes | LOW | Changelog, migration guide from dbt |
 
 ---
 
