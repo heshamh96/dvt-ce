@@ -632,11 +632,13 @@ def docs(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.compile_docs
+@p.empty_catalog
 @p.exclude
 @p.profiles_dir
 @p.project_dir
 @p.select
 @p.selector
+@p.static
 @p.target_path
 @p.threads
 @p.vars

@@ -32,7 +32,9 @@ class ExternalPartition(AdditionalPropertiesAllowed):
 
     def __post_init__(self):
         if self.name == "" or self.data_type == "":
-            raise CompilationError("External partition columns must have names and data types")
+            raise CompilationError(
+                "External partition columns must have names and data types"
+            )
 
 
 @dataclass
@@ -74,3 +76,5 @@ class SourceDefinition(ParsedSourceMandatory):
     created_at: float = field(default_factory=lambda: time.time())
     unrendered_database: Optional[str] = None
     unrendered_schema: Optional[str] = None
+    # DVT extension: which profiles.yml output this source lives on
+    connection: Optional[str] = None
