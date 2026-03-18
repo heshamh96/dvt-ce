@@ -191,12 +191,15 @@ class SourcePatcher:
             tags=tags,
             config=config,
             unrendered_config=unrendered_config,
+            connection=getattr(source, "connection", None),
         )
 
         if (
             parsed_source.freshness
             and not parsed_source.loaded_at_field
-            and not get_adapter(self.root_project).supports(Capability.TableLastModifiedMetadata)
+            and not get_adapter(self.root_project).supports(
+                Capability.TableLastModifiedMetadata
+            )
         ):
             # Metadata-based freshness is being used by default for this node,
             # but is not available through the configured adapter, so warn the
@@ -214,7 +217,9 @@ class SourcePatcher:
         return parsed_source
 
     # Use the SchemaGenericTestParser to parse the source tests
-    def get_generic_test_parser_for(self, package_name: str) -> "SchemaGenericTestParser":
+    def get_generic_test_parser_for(
+        self, package_name: str
+    ) -> "SchemaGenericTestParser":
         if package_name in self.generic_test_parsers:
             generic_test_parser = self.generic_test_parsers[package_name]
         else:
@@ -226,8 +231,12 @@ class SourcePatcher:
             self.generic_test_parsers[package_name] = generic_test_parser
         return generic_test_parser
 
-    def get_source_tests(self, target: UnpatchedSourceDefinition) -> Iterable[GenericTestNode]:
-        is_root_project = True if self.root_project.project_name == target.package_name else False
+    def get_source_tests(
+        self, target: UnpatchedSourceDefinition
+    ) -> Iterable[GenericTestNode]:
+        is_root_project = (
+            True if self.root_project.project_name == target.package_name else False
+        )
         target.validate_data_tests(is_root_project)
         for data_test, column in target.get_tests():
             yield self.parse_source_test(
@@ -265,7 +274,9 @@ class SourcePatcher:
             column_name = None
         else:
             column_name = column.name
-            should_quote = column.quote or (column.quote is None and target.quote_columns)
+            should_quote = column.quote or (
+                column.quote is None and target.quote_columns
+            )
             if should_quote:
                 column_name = get_adapter(self.root_project).quote(column_name)
 
@@ -285,7 +296,9 @@ class SourcePatcher:
         )
         return node
 
-    def _generate_source_config(self, target: UnpatchedSourceDefinition, rendered: bool):
+    def _generate_source_config(
+        self, target: UnpatchedSourceDefinition, rendered: bool
+    ):
         generator: BaseContextConfigGenerator
         if rendered:
             generator = ContextConfigGenerator(self.root_project)
@@ -358,11 +371,13 @@ class SourcePatcher:
             patch = self.manifest.source_patches[key]
             patch_name = f"{patch.overrides}.{patch.name}"
             if table_names is None:
-                unused_tables_formatted.append(f"  - Source {patch_name} (in {patch.path})")
+                unused_tables_formatted.append(
+                    f"  - Source {patch_name} (in {patch.path})"
+                )
             else:
                 for table_name in sorted(table_names):
                     unused_tables_formatted.append(
-                        f"  - Source table {patch_name}.{table_name} " f"(in {patch.path})"
+                        f"  - Source table {patch_name}.{table_name} (in {patch.path})"
                     )
         return unused_tables_formatted
 
@@ -414,7 +429,9 @@ def merge_freshness_time_thresholds(
         return update or base
 
 
-def merge_freshness(*thresholds: Optional[FreshnessThreshold]) -> Optional[FreshnessThreshold]:
+def merge_freshness(
+    *thresholds: Optional[FreshnessThreshold],
+) -> Optional[FreshnessThreshold]:
     if not thresholds:
         return None
 
@@ -434,7 +451,9 @@ def merge_freshness(*thresholds: Optional[FreshnessThreshold]) -> Optional[Fresh
             merged_error_after = merge_freshness_time_thresholds(
                 base.error_after, update.error_after
             )
-            merged_warn_after = merge_freshness_time_thresholds(base.warn_after, update.warn_after)
+            merged_warn_after = merge_freshness_time_thresholds(
+                base.warn_after, update.warn_after
+            )
 
             merged_freshness_obj.error_after = merged_error_after
             merged_freshness_obj.warn_after = merged_warn_after
