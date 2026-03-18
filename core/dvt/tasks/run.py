@@ -12,6 +12,7 @@ from typing import Dict, Optional, Type
 
 from dbt.task.run import ModelRunner, RunTask
 
+from dvt.config.parse_state import check_target_changes
 from dvt.config.source_connections import (
     load_source_connections,
     validate_source_connections,
@@ -66,7 +67,26 @@ class DvtRunTask(RunTask):
         project_dir = getattr(self.args, "PROJECT_DIR", None) or "."
         self._source_connections = load_source_connections(project_dir)
 
-        # Validate: DVT113 — source has connection: to same adapter type as default
+        # Check for default target changes (DVT008/DVT009)
+        if self._raw_profiles:
+            # Find default target config
+            default_config = None
+            for pname, pdata in self._raw_profiles.items():
+                if isinstance(pdata, dict):
+                    outputs = pdata.get("outputs", {})
+                    if self.config.target_name in outputs:
+                        default_config = outputs[self.config.target_name]
+                        break
+            if default_config:
+                target_warnings = check_target_changes(
+                    project_dir, self.config.target_name, default_config
+                )
+                for w in target_warnings:
+                    import sys
+
+                    print(f"\n  ⚠️  {w}\n", file=sys.stderr)
+
+        # Validate: DVT113 — source has connection: to same type+host as default
         if self._source_connections and self._raw_profiles:
             errors = validate_source_connections(
                 self._source_connections, self._raw_profiles, self.config.target_name
