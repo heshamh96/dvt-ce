@@ -649,8 +649,9 @@ def docs(ctx, **kwargs):
 @requires.runtime_config
 @requires.manifest
 def docs_generate(ctx, **kwargs):
-    """Generate the documentation website for your project."""
+    """Generate the documentation website with cross-engine catalog."""
     from dbt.task.docs.generate import GenerateTask
+    import os
 
     task = GenerateTask(
         ctx.obj["flags"],
@@ -659,6 +660,30 @@ def docs_generate(ctx, **kwargs):
     )
     results = task.run()
     success = task.interpret_results(results)
+
+    # Enrich catalog with remote source metadata (cross-engine)
+    try:
+        from dvt.tasks.docs import enrich_catalog_with_remote_sources
+        from dvt.sync.profiles_reader import default_profiles_dir
+
+        project_dir = getattr(ctx.obj["flags"], "PROJECT_DIR", None) or "."
+        target_path = os.path.join(project_dir, "target")
+        catalog_path = os.path.join(target_path, "catalog.json")
+        profiles_dir = (
+            getattr(ctx.obj["flags"], "PROFILES_DIR", None) or default_profiles_dir()
+        )
+
+        enrich_catalog_with_remote_sources(
+            catalog_path=catalog_path,
+            manifest=ctx.obj["manifest"],
+            project_dir=project_dir,
+            profiles_dir=profiles_dir,
+        )
+    except Exception as e:
+        import logging
+
+        logging.getLogger("dvt").debug(f"dvt docs: catalog enrichment failed: {e}")
+
     return results, success
 
 
