@@ -120,38 +120,55 @@ def validate_source_connections(
 ) -> List[str]:
     """Validate source connections against the default target.
 
-    Returns a list of error messages. Empty list = all valid.
+    Returns a list of error/warning messages. Empty list = all valid.
 
-    DVT113: Source has connection: to same adapter type as default target.
+    DVT113: Source has connection: to same adapter type AND same hostname
+            as the default target. This is redundant — remove connection:.
+
+    Same type + different hostname is ALLOWED (different instance of same engine).
     """
+    from dvt.config.parse_state import get_hostname
+
     errors = []
 
-    # Get default target's adapter type
-    default_type = None
+    # Get default target's config
+    default_config = None
     for profile_name, profile_data in profiles.items():
         if not isinstance(profile_data, dict):
             continue
         outputs = profile_data.get("outputs", {})
         if default_target in outputs:
-            default_type = outputs[default_target].get("type", "")
+            default_config = outputs[default_target]
             break
+
+    if not default_config:
+        return errors
+
+    default_type = default_config.get("type", "")
+    default_hostname = get_hostname(default_config)
 
     if not default_type:
         return errors
 
     # Check each source connection
     for source_name, connection_name in source_connections.items():
-        # Find the connection's adapter type
-        conn_type = None
+        conn_config = None
         for profile_name, profile_data in profiles.items():
             if not isinstance(profile_data, dict):
                 continue
             outputs = profile_data.get("outputs", {})
             if connection_name in outputs:
-                conn_type = outputs[connection_name].get("type", "")
+                conn_config = outputs[connection_name]
                 break
 
-        if conn_type and conn_type == default_type:
+        if not conn_config:
+            continue
+
+        conn_type = conn_config.get("type", "")
+        conn_hostname = get_hostname(conn_config)
+
+        if conn_type == default_type and conn_hostname == default_hostname:
+            # Same type + same hostname = redundant connection, should be removed
             errors.append(
                 f"DVT113: Source '{source_name}' has connection '{connection_name}' "
                 f"which uses the same adapter type '{conn_type}' as the default target. "
