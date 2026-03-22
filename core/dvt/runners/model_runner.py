@@ -447,6 +447,9 @@ class DvtModelRunner(ModelRunner):
                 sling_mode = "full-refresh"
                 primary_key = None
 
+                # Pre-drop with CASCADE so downstream views don't block Sling
+                self._drop_target_table_cascade(target_config, target_table)
+
             client.load_from_duckdb(
                 duckdb_path=db_path,
                 target_config=target_config,
@@ -485,6 +488,87 @@ class DvtModelRunner(ModelRunner):
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _drop_target_table_cascade(
+        self, target_config: Dict[str, Any], target_table: str
+    ) -> None:
+        """Drop the target table with CASCADE before Sling full-refresh.
+
+        Sling's full-refresh does DROP TABLE without CASCADE, which fails
+        when downstream views depend on the table. We pre-drop with CASCADE
+        so Sling can create the table cleanly.
+        """
+        from dvt.extraction.connection_mapper import map_to_sling_url
+
+        adapter_type = target_config.get("type", "")
+        try:
+            conn = self._connect_target(adapter_type, target_config)
+            if not conn:
+                return
+            cursor = conn.cursor()
+            drop_sql = f'DROP TABLE IF EXISTS {target_table} CASCADE'
+            cursor.execute(drop_sql)
+            conn.commit()
+            cursor.close()
+            conn.close()
+        except Exception as e:
+            logger.debug(
+                f"DVT: pre-drop CASCADE for {target_table} failed (non-fatal): {e}"
+            )
+
+    @staticmethod
+    def _connect_target(adapter_type: str, config: Dict[str, Any]):
+        """Get a native connection to the target for DDL operations."""
+        try:
+            if adapter_type in ("postgres", "redshift"):
+                import psycopg2
+
+                return psycopg2.connect(
+                    host=config.get("host", "localhost"),
+                    port=config.get("port", 5432),
+                    user=config.get("user", ""),
+                    password=config.get("password", config.get("pass", "")),
+                    dbname=config.get("dbname", config.get("database", "")),
+                )
+            elif adapter_type in ("mysql", "mariadb"):
+                import mysql.connector
+
+                return mysql.connector.connect(
+                    host=config.get("host", config.get("server", "localhost")),
+                    port=config.get("port", 3306),
+                    user=config.get("user", config.get("username", "")),
+                    password=config.get("password", config.get("pass", "")),
+                    database=config.get("database", config.get("schema", "")),
+                )
+            elif adapter_type == "sqlserver":
+                import pyodbc
+
+                host = config.get("host", config.get("server", ""))
+                port = config.get("port", 1433)
+                user = config.get("user", "")
+                password = config.get("password", config.get("pass", ""))
+                database = config.get("database", "")
+                conn_str = (
+                    f"DRIVER={{ODBC Driver 17 for SQL Server}};"
+                    f"SERVER={host},{port};DATABASE={database};"
+                    f"UID={user};PWD={password};TrustServerCertificate=yes;"
+                )
+                return pyodbc.connect(conn_str, autocommit=True)
+            elif adapter_type == "oracle":
+                import oracledb
+
+                host = config.get("host", "")
+                port = config.get("port", 1521)
+                service = config.get("service", config.get("database", ""))
+                dsn = f"{host}:{port}/{service}"
+                return oracledb.connect(
+                    user=config.get("user", ""),
+                    password=config.get("password", config.get("pass", "")),
+                    dsn=dsn,
+                )
+        except Exception as e:
+            logger.debug(f"DVT: could not connect to {adapter_type} for pre-drop: {e}")
+        return None
 
     def _resolve_watermark_from_target(
         self, model
