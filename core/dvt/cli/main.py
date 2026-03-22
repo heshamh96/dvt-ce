@@ -653,6 +653,28 @@ def docs_generate(ctx, **kwargs):
     from dbt.task.docs.generate import GenerateTask
     import os
 
+    from dvt.sync.profiles_reader import default_profiles_dir
+
+    project_dir = getattr(ctx.obj["flags"], "PROJECT_DIR", None) or "."
+    profiles_dir = (
+        getattr(ctx.obj["flags"], "PROFILES_DIR", None)
+        or default_profiles_dir()
+    )
+
+    # Stamp dvt_adapter_type on manifest nodes BEFORE GenerateTask writes them
+    try:
+        from dvt.tasks.docs import stamp_engine_types_on_manifest
+
+        stamp_engine_types_on_manifest(
+            manifest=ctx.obj["manifest"],
+            project_dir=project_dir,
+            profiles_dir=profiles_dir,
+        )
+    except Exception as e:
+        import logging
+
+        logging.getLogger("dvt").debug(f"dvt docs: engine stamp failed: {e}")
+
     task = GenerateTask(
         ctx.obj["flags"],
         ctx.obj["runtime_config"],
@@ -661,17 +683,12 @@ def docs_generate(ctx, **kwargs):
     results = task.run()
     success = task.interpret_results(results)
 
-    # Enrich catalog with remote source metadata (cross-engine)
+    # Enrich catalog with remote source column metadata (cross-engine)
     try:
         from dvt.tasks.docs import enrich_catalog_with_remote_sources
-        from dvt.sync.profiles_reader import default_profiles_dir
 
-        project_dir = getattr(ctx.obj["flags"], "PROJECT_DIR", None) or "."
         target_path = os.path.join(project_dir, "target")
         catalog_path = os.path.join(target_path, "catalog.json")
-        profiles_dir = (
-            getattr(ctx.obj["flags"], "PROFILES_DIR", None) or default_profiles_dir()
-        )
 
         enrich_catalog_with_remote_sources(
             catalog_path=catalog_path,
@@ -694,6 +711,7 @@ def docs_generate(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.browser
+@p.host
 @p.port
 @p.profiles_dir
 @p.project_dir

@@ -33,6 +33,8 @@ class Seed(ParsedResource):  # No SQLDefaults!
     root_path: Optional[str] = None
     depends_on: MacroDependsOn = field(default_factory=MacroDependsOn)
     defer_relation: Optional[DeferRelation] = None
+    # DVT extension: adapter type of the target engine
+    dvt_adapter_type: Optional[str] = None
 
     def __post_serialize__(self, dct: Dict, context: Optional[Dict] = None):
         dct = super().__post_serialize__(dct, context)

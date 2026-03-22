@@ -78,3 +78,5 @@ class SourceDefinition(ParsedSourceMandatory):
     unrendered_schema: Optional[str] = None
     # DVT extension: which profiles.yml output this source lives on
     connection: Optional[str] = None
+    # DVT extension: adapter type of the connection (postgres, snowflake, etc.)
+    dvt_adapter_type: Optional[str] = None
