@@ -138,13 +138,13 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 | P12.5: DVT009 instance switch warning | DONE | Warns when same type but different hostname:port. |
 | P12.6: Hostname includes port | DONE | `host:port` for postgres/mysql/oracle/etc. `account` for Snowflake. `project` for BigQuery. |
 
-### Phase 13: dvt docs (Catalog + Cross-Engine Lineage)
+### Phase 13: dvt docs (Catalog + Cross-Engine Lineage) [DONE]
 
-| Item | Priority | Details |
-|------|----------|---------|
-| P13.1: Multi-connection catalog | HIGH | `dvt docs generate` queries each source's connection for schema/column info. Not just the default adapter. |
-| P13.2: Cross-engine lineage | HIGH | Lineage graph shows which engine each source lives on. Extraction paths visible. Connection name per source node. |
-| P13.3: Connection badges in docs | MEDIUM | Each source/model shows its engine as a badge (e.g., 🐘 postgres, ❄️ snowflake). |
+| Item | Priority | Status | Details |
+|------|----------|--------|---------|
+| P13.1: Multi-connection catalog | HIGH | DONE | `dvt docs generate` queries each source's connection for schema/column info via native drivers. |
+| P13.2: Cross-engine lineage | HIGH | DONE | Lineage graph colors source nodes by engine type (postgres=blue, snowflake=cyan, mysql=blue, oracle=red, etc.). Engine name shown in node labels. |
+| P13.3: Connection badges in docs | MEDIUM | DONE | Source detail panel shows "Connection" field. Source list shows connections. Graph labels include engine badge. Manifest enriched with dvt_adapter_type for frontend. |
 
 ### Phase 14: README + Documentation
 

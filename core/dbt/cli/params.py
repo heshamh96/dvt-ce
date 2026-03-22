@@ -337,6 +337,14 @@ port = click.option(
     type=click.INT,
 )
 
+host = click.option(
+    "--host",
+    envvar=None,
+    help="Specify the host to serve the docs on",
+    default="localhost",
+    type=click.STRING,
+)
+
 print = click.option(
     "--print/--no-print",
     envvar="DBT_PRINT",

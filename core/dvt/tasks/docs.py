@@ -56,7 +56,8 @@ METADATA_SQL = {
     "snowflake": (
         "SELECT column_name, data_type, ordinal_position "
         "FROM information_schema.columns "
-        "WHERE table_schema = '{schema}' AND table_name = '{table}' "
+        "WHERE UPPER(table_schema) = UPPER('{schema}') "
+        "AND UPPER(table_name) = UPPER('{table}') "
         "ORDER BY ordinal_position"
     ),
     "bigquery": (
@@ -80,13 +81,82 @@ METADATA_SQL = {
 }
 
 
+def stamp_engine_types_on_manifest(
+    manifest: Any,
+    project_dir: str,
+    profiles_dir: str,
+) -> None:
+    """Set dvt_adapter_type on all manifest nodes BEFORE serialization.
+
+    Sources get the adapter type of their connection.
+    Models/seeds/snapshots get the adapter type of their target engine.
+    This data is baked into the manifest natively — no post-processing.
+    """
+    source_connections = load_source_connections(project_dir)
+
+    try:
+        profiles = read_profiles_yml(profiles_dir)
+    except Exception:
+        return
+
+    # Build connection → adapter_type map
+    all_output_types: Dict[str, str] = {}
+    default_adapter_type = ""
+    for profile_name, profile_data in profiles.items():
+        if not isinstance(profile_data, dict):
+            continue
+        for out_name, out_config in profile_data.get("outputs", {}).items():
+            if isinstance(out_config, dict):
+                all_output_types[out_name] = out_config.get("type", "")
+        if not default_adapter_type:
+            default_target = profile_data.get("target", "")
+            if default_target:
+                default_config = profile_data.get("outputs", {}).get(
+                    default_target, {}
+                )
+                default_adapter_type = default_config.get("type", "")
+
+    # Stamp sources
+    for uid, source_node in manifest.sources.items():
+        src_name = getattr(source_node, "source_name", "")
+        connection = source_connections.get(src_name)
+        if connection:
+            source_node.connection = connection
+            source_node.dvt_adapter_type = all_output_types.get(connection, "")
+        elif default_adapter_type:
+            source_node.dvt_adapter_type = default_adapter_type
+
+    # Stamp models, seeds, snapshots
+    for uid, node in manifest.nodes.items():
+        resource_type = getattr(node, "resource_type", "")
+        if resource_type not in ("model", "seed", "snapshot"):
+            continue
+        model_target = ""
+        config = getattr(node, "config", None)
+        if config:
+            # config uses AdditionalPropertiesAllowed — target is in _extra
+            try:
+                model_target = config["target"] or ""
+            except (KeyError, TypeError):
+                model_target = getattr(config, "target", "") or ""
+        if model_target and model_target in all_output_types:
+            node.dvt_adapter_type = all_output_types[model_target]
+        elif default_adapter_type:
+            node.dvt_adapter_type = default_adapter_type
+
+    logger.info(
+        f"dvt docs: stamped engine types on {len(manifest.sources)} sources "
+        f"+ {sum(1 for n in manifest.nodes.values() if getattr(n, 'resource_type', '') in ('model', 'seed', 'snapshot'))} models"
+    )
+
+
 def enrich_catalog_with_remote_sources(
     catalog_path: str,
     manifest: Any,
     project_dir: str,
     profiles_dir: str,
 ) -> None:
-    """Enrich catalog.json with metadata from remote source engines."""
+    """Enrich catalog.json with column metadata from remote source engines."""
     source_connections = load_source_connections(project_dir)
     if not source_connections:
         return
@@ -194,9 +264,14 @@ def _query_columns(
                 "name": col_name,
                 "comment": None,
             }
+        if not columns:
+            logger.warning(
+                f"dvt docs: no columns returned for {schema}.{table} "
+                f"on {adapter_type} — check schema/table names and case"
+            )
         return columns
     except Exception as e:
-        logger.debug(f"dvt docs: metadata query failed ({adapter_type}): {e}")
+        logger.warning(f"dvt docs: metadata query failed ({adapter_type}): {e}")
         try:
             conn.close()
         except Exception:
