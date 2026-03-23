@@ -93,9 +93,12 @@ class SlingClient:
 
         except Exception as e:
             error_msg = str(e)
-            logger.debug(f"Sling error details: {error_msg}")
+            logger.warning(f"Sling raw error: {error_msg[:2000]}")
 
             clean_msg = self._clean_sling_error(error_msg)
+            if clean_msg == "extraction failed":
+                # Fallback: include truncated raw error for debugging
+                clean_msg = f"extraction failed: {error_msg[:500]}"
             raise RuntimeError(clean_msg) from None
 
     @staticmethod
@@ -238,6 +241,7 @@ class SlingClient:
         target_table: str,
         mode: str = "full-refresh",
         primary_key: Optional[List[str]] = None,
+        update_key: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Load data from DuckDB into the target via Sling.
 
@@ -248,6 +252,7 @@ class SlingClient:
             target_table: Fully-qualified target table name.
             mode: Sling mode for the target write.
             primary_key: Column(s) for merge in incremental mode.
+            update_key: Column for backfill/incremental append mode.
 
         Returns:
             Dict with execution results.
@@ -265,6 +270,8 @@ class SlingClient:
         stream_config = {"object": target_table, "mode": mode}
         if primary_key:
             stream_config["primary_key"] = primary_key
+        if update_key:
+            stream_config["update_key"] = update_key
 
         replication = self._Replication(
             env=self.SLING_ENV,
