@@ -437,12 +437,28 @@ class DvtModelRunner(ModelRunner):
             target_table = self._model_table_name(model)
 
             # Determine Sling mode for target
+            update_key = None
             if is_incremental:
-                sling_mode = "incremental"
                 unique_key = model.config.get("unique_key")
-                primary_key = (
-                    [unique_key] if isinstance(unique_key, str) else (unique_key or [])
+                incremental_strategy = model.config.get(
+                    "incremental_strategy", ""
                 )
+
+                if incremental_strategy == "append" or not unique_key:
+                    # Append strategy: DuckDB cache already has the full result
+                    # (incremental WHERE already applied during SQL execution).
+                    # Sling's incremental/backfill modes require primary_key
+                    # which append models don't have. Use full-refresh to
+                    # replace the target with the complete cached result.
+                    sling_mode = "full-refresh"
+                    primary_key = None
+                else:
+                    sling_mode = "incremental"
+                    primary_key = (
+                        [unique_key]
+                        if isinstance(unique_key, str)
+                        else (unique_key or [])
+                    )
             else:
                 sling_mode = "full-refresh"
                 primary_key = None
@@ -457,6 +473,7 @@ class DvtModelRunner(ModelRunner):
                 target_table=target_table,
                 mode=sling_mode,
                 primary_key=primary_key,
+                update_key=update_key,
             )
 
             # Reopen cache for potential next model
