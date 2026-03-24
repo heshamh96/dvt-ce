@@ -113,13 +113,24 @@ class DvtCache:
         tbl = self.model_table_name(model_name)
         return self._table_exists(tbl)
 
-    def save_model_result(self, model_name: str, sql: str) -> int:
+    def save_model_result(
+        self, model_name: str, sql: str, append: bool = False
+    ) -> int:
         """Execute model SQL and save the result as a cached table.
 
-        Returns row count.
+        Args:
+            model_name: Name of the model.
+            sql: SQL to execute.
+            append: If True, INSERT INTO existing table instead of replacing.
+                    Used for incremental append strategy.
+
+        Returns total row count in the cached table.
         """
         tbl = self.model_table_name(model_name)
-        self.conn.execute(f"CREATE OR REPLACE TABLE {tbl} AS ({sql})")
+        if append and self.has_model_result(model_name):
+            self.conn.execute(f"INSERT INTO {tbl} ({sql})")
+        else:
+            self.conn.execute(f"CREATE OR REPLACE TABLE {tbl} AS ({sql})")
         result = self.conn.execute(f"SELECT COUNT(*) FROM {tbl}").fetchone()
         row_count = result[0] if result else 0
         logger.info(f"DVT cache: model result '{tbl}' saved ({row_count} rows)")
