@@ -211,18 +211,60 @@ dvt debug [--profiles-dir PATH]
 
 ---
 
-### dvt docs generate / dvt docs serve
+### dvt retract
 
-Generate and serve documentation with cross-engine lineage.
+Drop all models from their targets in reverse DAG order.
 
 ```bash
-dvt docs generate
-dvt docs serve [--port PORT]
+dvt retract [--select SELECTOR] [--exclude SELECTOR] [--target TARGET]
 ```
 
-Same as `dbt docs` but the lineage graph includes extraction nodes,
-showing the full pipeline from source databases through extraction
-to models to targets (including bucket targets).
+**What it does:**
+1. Loads manifest and selects model nodes (full dbt selector support)
+2. Sorts models in reverse topological order (downstream first)
+3. Connects to each model's target via native driver
+4. Drops the table/view with CASCADE (for engines that support it)
+5. Cleans corresponding `__model__` tables from DuckDB cache
+
+**Flags:**
+- `--select` / `-s` — node selection (same syntax as dbt: `+model`, `tag:daily`, etc.)
+- `--exclude` — exclude nodes from selection
+- Supports all dbt selector operators
+
+**Examples:**
+```bash
+dvt retract                              # retract all models
+dvt retract --select dim_customers       # retract one model
+dvt retract --select +d_b_dim_officers   # retract model + all ancestors
+dvt retract --exclude ephemeral_summary  # retract all except one
+```
+
+**Notes:**
+- Seeds and sources are NEVER touched
+- Uses CASCADE for postgres, snowflake, oracle, redshift
+- Drops dependent views automatically (reverse DAG order handles this)
+
+---
+
+### dvt docs generate / dvt docs serve
+
+Generate and serve documentation with cross-engine catalog and lineage.
+
+```bash
+dvt docs generate [--select SELECTOR] [--compile]
+dvt docs serve [--port PORT] [--host HOST]
+```
+
+**What it does:**
+1. Stamps `dvt_adapter_type` on all manifest nodes (sources + models) BEFORE generation
+2. Runs dbt's GenerateTask to build the catalog
+3. Enriches catalog with cross-engine column metadata from all remote sources
+4. Generates HTML with DVT-branded UI:
+   - DVT swirl logo + "Data Virtualization Tool" in sidebar
+   - Engine-colored nodes in lineage graph (each engine has brand colors)
+   - Connection badges on source and model labels
+   - Target + Engine fields in model detail panels
+   - Column metadata with native data types from each engine
 
 ---
 

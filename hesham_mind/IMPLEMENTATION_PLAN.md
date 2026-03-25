@@ -146,13 +146,32 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 | P13.2: Cross-engine lineage | HIGH | DONE | Lineage graph colors source nodes by engine type (postgres=blue, snowflake=cyan, mysql=blue, oracle=red, etc.). Engine name shown in node labels. |
 | P13.3: Connection badges in docs | MEDIUM | DONE | Source detail panel shows "Connection" field. Source list shows connections. Graph labels include engine badge. Manifest enriched with dvt_adapter_type for frontend. |
 
-### Phase 14: README + Documentation
+### Phase 13.5: Extraction Fixes [DONE]
 
-| Item | Priority | Details |
-|------|----------|---------|
-| P14.1: GitHub README (master branch) | HIGH | Comprehensive README for the Sling+DuckDB architecture. Getting started, installation, examples, philosophy. |
-| P14.2: PyPI description | MEDIUM | Update setup.py long_description for PyPI listing. |
-| P14.3: Create README update skill | LOW | Auto-generates README from hesham_mind/ docs when merging to master. |
+| Item | Status | Details |
+|------|--------|---------|
+| P13.5.1: Sling truncate mode | DONE | Non-incremental extraction uses `truncate` instead of `full-refresh` to preserve dependent views on the target. |
+| P13.5.2: Cache append for incremental | DONE | Append-strategy incrementals INSERT INTO the DuckDB cache table instead of replacing — accumulates rows across runs. |
+| P13.5.3: Sling error reporting | DONE | Raw Sling error included when clean error parsing falls through to generic "extraction failed". |
+| P13.5.4: `dvt docs serve --host` | DONE | Added missing `--host` CLI parameter. |
+
+### Phase 13.6: dvt retract [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P13.6.1: `dvt retract` command | DONE | Drops all models from targets in reverse DAG order. Full dbt selector support (`--select`, `--exclude`, `+model+`, `tag:`, etc.). |
+| P13.6.2: CASCADE on DROP | DONE | Uses CASCADE for engines that support it (postgres, snowflake, oracle, redshift). |
+| P13.6.3: DuckDB cache cleanup | DONE | Drops `__model__` tables from cache for retracted models. |
+| P13.6.4: Multi-engine support | DONE | Connects to each model's target via native driver to execute DROP. |
+
+### Phase 14: README + Branding [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P14.1: GitHub/PyPI README | DONE | Comprehensive README: architecture diagram, all 13 engines, all commands, configuration examples, two-dialect explanation, incremental models, `--target` philosophy. |
+| P14.2: DVT logo in docs | DONE | Replaced dbt SVG with DVT swirl logo (50x50) + "Data Virtualization Tool" text in sidebar. |
+| P14.3: Docs branding | DONE | Page title "DVT Docs", meta tags updated, dbt references replaced. |
+| P14.4: Engine-colored lineage | DONE | Source + model nodes colored by engine brand colors. Target/Engine fields in detail panels. |
 
 ### Phase 15: Advanced Features
 

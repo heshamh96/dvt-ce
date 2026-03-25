@@ -132,6 +132,8 @@ core/
       sync.py                       # DvtSyncTask — environment bootstrap
       show.py                       # DvtShowTask — DuckDB local query
       debug.py                      # DvtDebugTask — multi-connection checks
+      docs.py                       # Cross-engine catalog enrichment + engine stamping
+      retract.py                    # DvtRetractTask — reverse DAG model drop
     runners/
       __init__.py
       model_runner.py               # DvtModelRunner(ModelRunner)
