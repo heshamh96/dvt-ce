@@ -333,7 +333,7 @@ DVT stands on the shoulders of three exceptional open-source projects:
 | Project | Role in DVT | License |
 |---------|-------------|---------|
 | [**dbt-core**](https://github.com/dbt-labs/dbt-core) | DAG orchestration, SQL models, Jinja, testing, docs, adapters | Apache 2.0 |
-| [**Sling**](https://github.com/slingdata-io/sling-cli) | High-performance data movement across 30+ connectors | Apache 2.0 |
+| [**Sling**](https://github.com/slingdata-io/sling-cli) | High-performance data movement across 30+ connectors (free tier) | Apache 2.0 |
 | [**DuckDB**](https://github.com/duckdb/duckdb) | Local analytics engine — extraction compute, caching, `dvt show` | MIT |
 
 We are grateful to [dbt Labs](https://www.getdbt.com/), [Sling Data](https://slingdata.io/), and the [DuckDB Foundation](https://duckdb.org/) for building and open-sourcing these tools.
