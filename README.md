@@ -350,5 +350,5 @@ Licensed under the Apache License, Version 2.0.
 ---
 
 <p align="center">
-  <sub>Built by data engineers, for data engineers.</sub>
+  <sub>Built by <a href="https://www.linkedin.com/in/hesham-badawi-4022a8a3/">Hesham Badawi</a> — data engineer, for data engineers.</sub>
 </p>
