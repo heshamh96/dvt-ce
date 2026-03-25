@@ -235,7 +235,7 @@ jobs:
           CURRENT_DATE=$(date +'%Y-%m-%dT%H_%M_%S') # no colons allowed for artifacts
           echo "date=$CURRENT_DATE" >> $GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: logs_${{ matrix.python-version }}_${{ matrix.os }}_${{ matrix.split-group }}_${{ steps.date.outputs.date }}
@@ -318,7 +318,7 @@ jobs:
           CURRENT_DATE=$(date +'%Y-%m-%dT%H_%M_%S') # no colons allowed for artifacts
           echo "date=$CURRENT_DATE" >> $GITHUB_OUTPUT
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: logs_${{ matrix.python-version }}_${{ matrix.os }}_${{ matrix.split-group }}_${{ steps.date.outputs.date }}
