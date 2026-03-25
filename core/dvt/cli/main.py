@@ -144,6 +144,40 @@ def run(ctx, **kwargs):
 
 
 # ---------------------------------------------------------------------------
+# dvt retract
+# ---------------------------------------------------------------------------
+@cli.command("retract")
+@click.pass_context
+@global_flags
+@p.exclude
+@p.profiles_dir
+@p.project_dir
+@p.select
+@p.selector
+@p.target_path
+@p.threads
+@p.vars
+@requires.postflight
+@requires.preflight
+@requires.profile
+@requires.project
+@requires.runtime_config
+@requires.manifest
+def retract(ctx, **kwargs):
+    """Drop all models from their targets in reverse DAG order."""
+    from dvt.tasks.retract import DvtRetractTask
+
+    task = DvtRetractTask(
+        ctx.obj["flags"],
+        ctx.obj["runtime_config"],
+        ctx.obj["manifest"],
+    )
+    results = task.run()
+    success = task.interpret_results(results)
+    return results, success
+
+
+# ---------------------------------------------------------------------------
 # dvt compile
 # ---------------------------------------------------------------------------
 @cli.command("compile")
