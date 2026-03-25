@@ -39,7 +39,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Hesham Badawi",
-    author_email="hesham.badawi96@gmail.com",
+    author_email="hesham.h.96@gmail.com",
     url="https://github.com/heshamh96/dvt-ce",
     packages=find_namespace_packages(include=["dbt", "dbt.*", "dvt", "dvt.*"]),
     include_package_data=True,

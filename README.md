@@ -100,19 +100,21 @@ The user never thinks about this — DVT decides the path automatically.
 ## Installation
 
 ```bash
-pip install dvt-ce dvt-adapters
+pip install dvt-ce
 ```
 
 Or with [uv](https://docs.astral.sh/uv/) (recommended):
 
 ```bash
-uv add dvt-ce dvt-adapters
+uv add dvt-ce
 ```
+
+This installs everything — `dvt-ce` automatically pulls in `dvt-adapters` (all 13 engines), Sling, DuckDB, and all core dependencies.
 
 Then bootstrap your environment:
 
 ```bash
-dvt sync    # Installs drivers, DuckDB extensions, Sling, cloud SDKs
+dvt sync    # Installs database drivers, DuckDB extensions, Sling binary, cloud SDKs
 ```
 
 ---
