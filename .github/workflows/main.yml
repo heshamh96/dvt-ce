@@ -97,7 +97,7 @@ jobs:
           tox --version
 
       - name: Run unit tests
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 3
@@ -220,7 +220,7 @@ jobs:
           tox --version
 
       - name: Run integration tests
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 30
           max_attempts: 3
@@ -285,7 +285,7 @@ jobs:
       - name: Set up postgres (macos)
         if: runner.os == 'macOS'
 
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 10
           max_attempts: 3
@@ -303,7 +303,7 @@ jobs:
           tox --version
 
       - name: Run integration tests
-        uses: nick-fields/retry@v3
+        uses: nick-fields/retry@v4
         with:
           timeout_minutes: 30
           max_attempts: 3
