@@ -50,13 +50,35 @@ def _status_icon(status: str) -> str:
 
 
 def _check_adapter_importable(adapter_type: str) -> bool:
-    """Check if a dbt adapter can be imported."""
+    """Check if a dbt adapter AND its database driver can be imported."""
+    # First check the adapter module
     try:
-        # dbt adapters register under dbt.adapters.<type>
         __import__(f"dbt.adapters.{adapter_type}")
-        return True
     except (ImportError, Exception):
         return False
+
+    # Then check the actual database driver (the adapter import may succeed
+    # even if the driver is missing — it only fails at connection time)
+    DRIVER_IMPORTS = {
+        "postgres": "psycopg2",
+        "redshift": "psycopg2",
+        "mysql": "mysql.connector",
+        "mariadb": "mysql.connector",
+        "sqlserver": "pyodbc",
+        "oracle": "oracledb",
+        "snowflake": "snowflake.connector",
+        "databricks": "databricks.sql",
+        "bigquery": "google.cloud.bigquery",
+        "duckdb": "duckdb",
+        "spark": "pyhive",
+    }
+    driver = DRIVER_IMPORTS.get(adapter_type)
+    if driver:
+        try:
+            __import__(driver)
+        except ImportError:
+            return False
+    return True
 
 
 class DvtSyncTask:
@@ -158,9 +180,20 @@ class DvtSyncTask:
             pad = "." * 24
             print(f"    core {pad} duckdb {duckdb.__version__} [installed]")
         except ImportError:
-            pad = "." * 24
-            print(f"    core {pad} [MISSING — install duckdb]")
-            all_ok = False
+            # DuckDB missing — try to install it
+            from dvt.sync.adapter_installer import _pip_install
+
+            if not self.dry_run:
+                _pip_install("duckdb")
+            try:
+                import duckdb
+
+                pad = "." * 24
+                print(f"    core {pad} duckdb {duckdb.__version__} [installed]")
+            except ImportError:
+                pad = "." * 24
+                print(f"    core {pad} [MISSING — run: uv pip install duckdb]")
+                all_ok = False
 
         extensions = get_required_extensions(adapter_types)
         results = install_extensions(extensions, dry_run=self.dry_run)
