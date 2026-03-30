@@ -224,20 +224,21 @@ class DvtInitTask:
             return True
 
         # Not in a project — create one
+        in_place = False
         if not project_name:
-            # Default to current directory name
+            # No name given — scaffold in current directory
             cwd_name = _sanitize_project_name(Path.cwd().name)
             project_name = click.prompt(
                 "Enter a name for your project",
                 default=cwd_name,
             )
             project_name = _sanitize_project_name(project_name)
-
-        # Validate
-        project_name = _sanitize_project_name(project_name)
+            in_place = True
+        else:
+            project_name = _sanitize_project_name(project_name)
 
         # Create project scaffold
-        self._create_project(project_name)
+        self._create_project(project_name, in_place=in_place)
 
         # Set up profiles
         self._ensure_profiles(dvt_dir, project_name, skip_profile)
@@ -259,24 +260,25 @@ class DvtInitTask:
         except Exception:
             return "my_project"
 
-    def _create_project(self, project_name: str) -> None:
-        """Create a new DVT project scaffold."""
-        project_dir = Path(project_name)
+    def _create_project(
+        self, project_name: str, in_place: bool = False
+    ) -> None:
+        """Create a new DVT project scaffold.
 
-        if project_dir.exists() and any(project_dir.iterdir()):
-            click.echo(
-                f"\n  Directory '{project_name}' already exists and is not empty."
-            )
-            click.echo("  Initializing inside current directory instead.\n")
+        Args:
+            project_name: Name for dbt_project.yml profile reference.
+            in_place: If True, scaffold in current directory instead of
+                      creating a subdirectory.
+        """
+        if in_place:
             project_dir = Path(".")
-            # Write dbt_project.yml if it doesn't exist
-            if not (project_dir / "dbt_project.yml").exists():
-                self._write_dbt_project_yml(project_dir, project_name)
-                self._create_dirs(project_dir)
         else:
+            project_dir = Path(project_name)
             project_dir.mkdir(exist_ok=True)
+
+        if not (project_dir / "dbt_project.yml").exists():
             self._write_dbt_project_yml(project_dir, project_name)
-            self._create_dirs(project_dir)
+        self._create_dirs(project_dir)
 
         click.echo(f'  Created project "{project_name}"')
 

@@ -65,7 +65,7 @@ class DvtDebugTask:
             print("  DuckDB: NOT FOUND")
         print()
 
-        # Test each connection
+        # Test each connection (both adapter and Sling)
         all_ok = True
         results: List[Tuple[str, str, str, str]] = []  # (name, type, status, detail)
 
@@ -73,22 +73,52 @@ class DvtDebugTask:
         for output in outputs:
             name = output.get("_name", "?")
             adapter_type = output.get("type", "?")
-            profile = output.get("_profile", "?")
 
-            status, detail, elapsed = self._test_connection(output)
-            results.append((name, adapter_type, status, detail))
+            # Test adapter (native driver)
+            adapter_status, adapter_detail, adapter_elapsed = (
+                self._test_adapter(output)
+            )
+
+            # Test Sling
+            sling_status, sling_detail, sling_elapsed = (
+                self._test_sling(output)
+            )
+
+            # Overall status: OK if adapter passes
+            elapsed = max(adapter_elapsed, sling_elapsed)
+            if adapter_status == "ok":
+                status = "ok"
+            elif adapter_status == "skip":
+                # Adapter not available — rely on Sling result
+                status = sling_status
+            else:
+                status = "failed"
+            all_ok = all_ok and status == "ok"
+            results.append((name, adapter_type, status, ""))
 
             pad = "." * max(1, 30 - len(name))
             elapsed_str = f" ({elapsed:.1f}s)" if elapsed else ""
 
+            # Format adapter status
+            a_icon = "OK" if adapter_status == "ok" else (
+                "SKIP" if adapter_status == "skip" else "FAIL"
+            )
+            s_icon = "OK" if sling_status == "ok" else (
+                "SKIP" if sling_status == "skip" else "FAIL"
+            )
+
             if status == "ok":
                 print(f"    🟩 {name} {pad} {adapter_type}{elapsed_str}")
+                print(f"       Adapter: {a_icon} | Sling: {s_icon}")
             elif status == "skip":
-                print(f"    ⬜ {name} {pad} {detail}")
+                print(f"    ⬜ {name} {pad} {adapter_type}")
+                print(f"       Adapter: {a_icon} | Sling: {s_icon}")
             else:
                 print(f"    🟥 {name} {pad} {adapter_type}")
-                print(f"       {detail}")
-                all_ok = False
+                detail = adapter_detail or sling_detail
+                print(f"       Adapter: {a_icon} | Sling: {s_icon}")
+                if detail:
+                    print(f"       {detail}")
 
         print()
         ok_count = sum(1 for _, _, s, _ in results if s == "ok")
@@ -105,70 +135,61 @@ class DvtDebugTask:
 
         return {"success": all_ok, "results": results}
 
-    def _test_connection(self, output: Dict[str, Any]) -> Tuple[str, str, float]:
-        """Test a single connection. Returns (status, detail, elapsed_seconds).
+    def _test_adapter(
+        self, output: Dict[str, Any]
+    ) -> Tuple[str, str, float]:
+        """Test connection using the native database driver."""
+        from dvt.tasks.docs import _get_connection
 
-        status: 'ok', 'failed', 'skip'
-        """
         adapter_type = output.get("type", "")
-        name = output.get("_name", "?")
-
-        # Bucket types — test differently
         if adapter_type in ("s3", "gcs", "azure"):
             return self._test_bucket(output)
 
-        # Database types — test via Sling or DuckDB ATTACH
-        if adapter_type not in supported_types():
-            return "skip", f"unsupported type '{adapter_type}'", 0.0
-
-        # Try Sling connection test
         try:
-            url = map_to_sling_url(output)
+            start = time.time()
+            conn = _get_connection(adapter_type, output)
+            if not conn:
+                return "skip", f"no driver for {adapter_type}", 0.0
+            cursor = conn.cursor()
+            if "oracle" in adapter_type:
+                cursor.execute("SELECT 1 FROM DUAL")
+            else:
+                cursor.execute("SELECT 1")
+            cursor.fetchone()
+            cursor.close()
+            conn.close()
+            elapsed = time.time() - start
+            return "ok", "", elapsed
         except Exception as e:
-            return "failed", f"cannot build connection URL: {e}", 0.0
+            elapsed = time.time() - start if "start" in dir() else 0.0
+            msg = str(e)
+            if "could not connect" in msg.lower() or "connection refused" in msg.lower():
+                return "failed", "could not connect to database", elapsed
+            return "failed", msg[:200], elapsed
 
-        return self._test_db_via_sling(name, url, adapter_type)
-
-    def _test_db_via_sling(
-        self, name: str, url: str, adapter_type: str
+    def _test_sling(
+        self, output: Dict[str, Any]
     ) -> Tuple[str, str, float]:
-        """Test a database connection via Sling."""
+        """Test connection using Sling."""
+        adapter_type = output.get("type", "")
+        if adapter_type in ("s3", "gcs", "azure"):
+            return "skip", "bucket", 0.0
+
+        if adapter_type not in supported_types():
+            return "skip", f"unsupported type", 0.0
+
         sling_ok, _ = check_sling()
         if not sling_ok:
-            # Fallback: try DuckDB ATTACH for supported types
-            if adapter_type in ("postgres", "mysql", "sqlite"):
-                return self._test_db_via_duckdb(name, url, adapter_type)
             return "skip", "Sling not available", 0.0
 
         try:
-            from sling import SLING_BIN
-            import subprocess
-
-            start = time.time()
-            # Use sling conns test with the URL
-            result = subprocess.run(
-                [SLING_BIN, "conns", "exec", name, "select 1"],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                env={
-                    **__import__("os").environ,
-                    f"SLING_CONNECTION_{name.upper()}": url,
-                    # Also set as the connection name directly
-                    name: url,
-                },
-            )
-            elapsed = time.time() - start
-
-            if result.returncode == 0:
-                return "ok", "", elapsed
-            else:
-                error = result.stderr.strip() or result.stdout.strip()
-                # Try a simpler approach — just construct the URL and let Sling test it
-                return self._test_db_via_sling_replication(name, url, adapter_type)
-
+            url = map_to_sling_url(output)
         except Exception as e:
-            return self._test_db_via_sling_replication(name, url, adapter_type)
+            return "failed", f"bad URL: {e}", 0.0
+
+        return self._test_db_via_sling_replication(
+            output.get("_name", "?"), url, adapter_type
+        )
 
     def _test_db_via_sling_replication(
         self, name: str, url: str, adapter_type: str
@@ -201,7 +222,17 @@ class DvtDebugTask:
                         ),
                     },
                 )
-                replication.run(return_output=True)
+                import io
+                import sys
+
+                # Suppress Sling stdout/stderr (config file path, etc.)
+                old_stdout, old_stderr = sys.stdout, sys.stderr
+                sys.stdout = io.StringIO()
+                sys.stderr = io.StringIO()
+                try:
+                    replication.run(return_output=True)
+                finally:
+                    sys.stdout, sys.stderr = old_stdout, old_stderr
                 elapsed = time.time() - start
                 return "ok", "", elapsed
             finally:
@@ -217,28 +248,6 @@ class DvtDebugTask:
             if "could not connect" in error_msg.lower():
                 return "failed", "could not connect to database", elapsed
             return "failed", error_msg[:200], elapsed
-
-    def _test_db_via_duckdb(
-        self, name: str, url: str, adapter_type: str
-    ) -> Tuple[str, str, float]:
-        """Test a database connection via DuckDB ATTACH (fallback for pg/mysql/sqlite)."""
-        try:
-            import duckdb
-
-            start = time.time()
-            conn = duckdb.connect(":memory:")
-            # DuckDB ATTACH doesn't use Sling URLs — need native format
-            # This is a basic fallback, not the primary path
-            conn.execute("SELECT 1")
-            elapsed = time.time() - start
-            conn.close()
-            return (
-                "skip",
-                "use dvt sync to install Sling for full connection test",
-                elapsed,
-            )
-        except Exception as e:
-            return "skip", f"DuckDB fallback failed: {e}", 0.0
 
     def _test_bucket(self, output: Dict[str, Any]) -> Tuple[str, str, float]:
         """Test a bucket connection (S3, GCS, Azure)."""
