@@ -187,9 +187,20 @@ class DvtDebugTask:
         except Exception as e:
             return "failed", f"bad URL: {e}", 0.0
 
-        return self._test_db_via_sling_replication(
-            output.get("_name", "?"), url, adapter_type
+        name = output.get("_name", "?")
+        status, detail, elapsed = self._test_db_via_sling_replication(
+            name, url, adapter_type
         )
+
+        # If Sling failed and URL has sslmode=prefer, retry with sslmode=disable
+        # Some platforms (WSL2, Docker) don't support SSL negotiation
+        if status == "failed" and "sslmode=prefer" in url:
+            url_fallback = url.replace("sslmode=prefer", "sslmode=disable")
+            status, detail, elapsed = self._test_db_via_sling_replication(
+                name, url_fallback, adapter_type
+            )
+
+        return status, detail, elapsed
 
     def _test_db_via_sling_replication(
         self, name: str, url: str, adapter_type: str

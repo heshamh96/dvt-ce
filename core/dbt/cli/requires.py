@@ -12,6 +12,7 @@ from dbt.adapters.factory import adapter_management, get_adapter, register_adapt
 from dbt.cli.exceptions import ExceptionExit, ResultExit
 from dbt.cli.flags import Flags
 from dbt.config import RuntimeConfig
+from dbt_common.exceptions import DbtRuntimeError
 from dbt.config.runtime import UnsetProfile, load_profile, load_project
 from dbt.context.providers import generate_runtime_macro_context
 from dbt.context.query_header import generate_query_header_context
@@ -229,7 +230,15 @@ def profile(func):
         # TODO: Generalize safe access to flags.THREADS:
         # https://github.com/dbt-labs/dbt-core/issues/6259
         threads = getattr(flags, "THREADS", None)
-        profile = load_profile(flags.PROJECT_DIR, flags.VARS, flags.PROFILE, flags.TARGET, threads)
+        try:
+            profile = load_profile(flags.PROJECT_DIR, flags.VARS, flags.PROFILE, flags.TARGET, threads)
+        except ModuleNotFoundError as e:
+            module = e.name or str(e)
+            raise DbtRuntimeError(
+                f"Database driver '{module}' is not installed.\n"
+                f"Run 'dvt sync' to install all required drivers, "
+                f"then try again."
+            )
         ctx.obj["profile"] = profile
 
         return func(*args, **kwargs)
