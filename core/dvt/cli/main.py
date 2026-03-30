@@ -224,6 +224,8 @@ def compile(ctx, **kwargs):
 @click.pass_context
 @global_flags
 @p.exclude
+@p.resource_type
+@p.exclude_resource_type
 @p.profiles_dir
 @p.project_dir
 @p.select
@@ -294,6 +296,7 @@ def seed(ctx, **kwargs):
 @cli.command("snapshot")
 @click.pass_context
 @global_flags
+@p.empty
 @p.exclude
 @p.profiles_dir
 @p.project_dir
