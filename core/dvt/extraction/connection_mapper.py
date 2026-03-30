@@ -62,6 +62,10 @@ def _map_postgres(c: Dict[str, Any]) -> str:
     port = _safe(c.get("port", "5432"))
     dbname = _safe(c.get("dbname", c.get("database", "")))
     sslmode = _safe(c.get("sslmode", "disable"))
+    # Sling's pq driver only supports: require, verify-full, verify-ca, disable
+    # Map unsupported modes to the closest supported equivalent
+    if sslmode in ("prefer", "allow"):
+        sslmode = "disable"
     url = f"postgres://{user}:{password}@{host}:{port}/{dbname}?sslmode={sslmode}"
     schema = c.get("schema")
     if schema:
@@ -76,6 +80,8 @@ def _map_redshift(c: Dict[str, Any]) -> str:
     port = _safe(c.get("port", "5439"))
     dbname = _safe(c.get("dbname", c.get("database", "")))
     sslmode = _safe(c.get("sslmode", "require"))
+    if sslmode in ("prefer", "allow"):
+        sslmode = "disable"
     return f"redshift://{user}:{password}@{host}:{port}/{dbname}?sslmode={sslmode}"
 
 
