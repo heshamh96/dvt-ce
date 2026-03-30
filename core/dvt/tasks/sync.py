@@ -137,6 +137,13 @@ class DvtSyncTask:
         print()
 
         # ---------------------------------------------------------------
+        # Step 1.5: Verify core dependencies (can fail on partial install)
+        # ---------------------------------------------------------------
+        core_ok = self._verify_core_deps()
+        if not core_ok:
+            all_ok = False
+
+        # ---------------------------------------------------------------
         # Step 2: Install adapters + purge dbt-core + verify
         # ---------------------------------------------------------------
         db_types = {
@@ -180,20 +187,9 @@ class DvtSyncTask:
             pad = "." * 24
             print(f"    core {pad} duckdb {duckdb.__version__} [installed]")
         except ImportError:
-            # DuckDB missing — try to install it
-            from dvt.sync.adapter_installer import _pip_install
-
-            if not self.dry_run:
-                _pip_install("duckdb")
-            try:
-                import duckdb
-
-                pad = "." * 24
-                print(f"    core {pad} duckdb {duckdb.__version__} [installed]")
-            except ImportError:
-                pad = "." * 24
-                print(f"    core {pad} [MISSING — run: uv pip install duckdb]")
-                all_ok = False
+            pad = "." * 24
+            print(f"    core {pad} [MISSING — run: uv pip install duckdb]")
+            all_ok = False
 
         extensions = get_required_extensions(adapter_types)
         results = install_extensions(extensions, dry_run=self.dry_run)
@@ -231,6 +227,54 @@ class DvtSyncTask:
             print("  Sync completed with errors. Check output above.")
 
         return {"success": all_ok}
+
+    def _verify_core_deps(self) -> bool:
+        """Verify and install critical core dependencies.
+
+        These are dvt-ce's own dependencies that can fail to install
+        (large binaries, memory issues, network timeouts). dvt sync
+        detects missing ones and installs them.
+        """
+        from dvt.sync.adapter_installer import _pip_install
+
+        CORE_DEPS = {
+            "duckdb": "duckdb",
+            "pyarrow": "pyarrow",
+            "sqlglot": "sqlglot",
+            "sling": "sling",
+        }
+
+        missing = []
+        for module, package in CORE_DEPS.items():
+            try:
+                __import__(module)
+            except ImportError:
+                missing.append((module, package))
+
+        if not missing:
+            return True
+
+        print("  Core dependencies:")
+        all_ok = True
+        for module, package in missing:
+            pad = "." * max(1, 30 - len(package))
+            if self.dry_run:
+                print(f"    {package} {pad} [would install]")
+                continue
+            print(f"    {package} {pad} [installing...]")
+            if _pip_install(package):
+                # Verify import after install
+                try:
+                    __import__(module)
+                    print(f"    {package} {pad} 🟩")
+                except ImportError:
+                    print(f"    {package} {pad} 🟥 [install failed]")
+                    all_ok = False
+            else:
+                print(f"    {package} {pad} 🟥 [install failed]")
+                all_ok = False
+        print()
+        return all_ok
 
     def _verify_and_install_drivers(
         self,
