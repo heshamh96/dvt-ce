@@ -480,11 +480,11 @@ def debug(ctx, **kwargs):
 @requires.preflight
 def init(ctx, **kwargs):
     """Initialize a new DVT project."""
-    from dbt.task.init import InitTask
+    from dvt.tasks.init import DvtInitTask
 
-    with InitTask(ctx.obj["flags"]) as task:
-        results = task.run()
-        success = task.interpret_results(results)
+    task = DvtInitTask(ctx.obj["flags"])
+    results = task.run()
+    success = task.interpret_results(results)
     return results, success
 
 

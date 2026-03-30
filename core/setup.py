@@ -28,7 +28,7 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 
 package_name = "dvt-ce"
-package_version = "0.1.23"
+package_version = "0.1.24"
 description = """DVT — cross-engine data transformation tool with DuckDB federation."""
 
 
@@ -77,7 +77,7 @@ setup(
         "dbt-semantic-interfaces>=0.7.4,<0.8",
         # Minor versions for these are expected to be backwards-compatible
         "dbt-common>=1.13.0,<2.0",
-        "dvt-adapters>=0.2.1",
+        "dvt-adapters>=0.1.23",
         # ----
         # Expect compatibility with all new versions of these packages, so lower bounds only.
         "packaging>20.9",
