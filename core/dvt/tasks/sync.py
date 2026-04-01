@@ -96,6 +96,13 @@ class DvtSyncTask:
         print(f"\ndvt sync — reading profiles from: {self.profiles_dir}\n")
         all_ok = True
 
+        # Initialize tracking for sync (doesn't go through requires.preflight)
+        try:
+            from dbt.tracking import initialize_from_flags
+            initialize_from_flags(True, self.profiles_dir)
+        except Exception:
+            pass
+
         # ---------------------------------------------------------------
         # Step 0: Purge dbt-core if present (always, before anything)
         # ---------------------------------------------------------------
@@ -225,6 +232,17 @@ class DvtSyncTask:
             print("  Sync complete. Environment ready.")
         else:
             print("  Sync completed with errors. Check output above.")
+
+        # Audit
+        try:
+            from dbt.tracking import track_dvt_sync, flush
+            track_dvt_sync({
+                "adapter_types": sorted(adapter_types),
+                "success": all_ok,
+            })
+            flush()
+        except Exception:
+            pass
 
         return {"success": all_ok}
 

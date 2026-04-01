@@ -246,6 +246,14 @@ class DvtInitTask:
         # Print next steps
         self._print_next_steps(project_name, dvt_dir)
 
+        # Audit
+        try:
+            from dbt.tracking import track_dvt_init
+            track_dvt_init({"project_name_hash": __import__("hashlib").md5(
+                project_name.encode()).hexdigest()})
+        except Exception:
+            pass
+
         return True
 
     def interpret_results(self, results):

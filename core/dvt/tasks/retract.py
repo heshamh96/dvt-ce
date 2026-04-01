@@ -163,6 +163,19 @@ class DvtRetractTask(GraphRunnableTask):
         )
         print()
 
+        # Audit
+        try:
+            from dbt.tracking import track_dvt_retract
+            track_dvt_retract({
+                "model_count": total,
+                "ok_count": ok_count,
+                "error_count": err_count,
+                "duration_seconds": total_time,
+                "success": err_count == 0,
+            })
+        except Exception:
+            pass
+
         return results
 
     def interpret_results(self, results) -> bool:

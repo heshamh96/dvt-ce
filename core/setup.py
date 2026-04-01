@@ -128,7 +128,7 @@ setup(
         "networkx>=2.3,<4.0",
         "protobuf>=6.0,<7.0",
         "requests<3.0.0",  # should match dbt-common
-        "snowplow-tracker>=1.0.2,<2.0",
+        "posthog>=3.0.0,<4.0",
         # ----
         # These packages are major-version-0. Keep upper bounds on upcoming minor versions (which could have breaking changes)
         # and check compatibility / bump in each new minor version of dbt-core.

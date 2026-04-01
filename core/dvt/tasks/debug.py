@@ -133,6 +133,20 @@ class DvtDebugTask:
                 f"  {ok_count} OK, {fail_count} FAILED, {skip_count} SKIPPED out of {total}."
             )
 
+        # Audit
+        try:
+            from dbt.tracking import track_dvt_debug
+            adapter_types = list(set(t for _, t, _, _ in results))
+            track_dvt_debug({
+                "connection_count": total,
+                "ok_count": ok_count,
+                "fail_count": fail_count,
+                "adapter_types": adapter_types,
+                "success": all_ok,
+            })
+        except Exception:
+            pass
+
         return {"success": all_ok, "results": results}
 
     def _test_adapter(

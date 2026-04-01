@@ -747,6 +747,13 @@ def docs_generate(ctx, **kwargs):
 
         logging.getLogger("dvt").debug(f"dvt docs: catalog enrichment failed: {e}")
 
+    # Audit
+    try:
+        from dbt.tracking import track_dvt_docs
+        track_dvt_docs({"success": success})
+    except Exception:
+        pass
+
     return results, success
 
 
