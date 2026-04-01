@@ -13,53 +13,55 @@ compatibility and debugging.
 
 ### dvt sync
 
-Bootstrap the DVT environment. Reads profiles.yml and installs everything needed.
+Self-healing environment bootstrap. Reads profiles.yml and ensures everything works.
 
 ```bash
-dvt sync [--profiles-dir PATH] [--python-env PATH]
+dvt sync [--profiles-dir PATH] [--skip-test] [--dry-run]
 ```
 
-**What it does:**
-1. Reads profiles.yml (default `~/.dbt/profiles.yml` or `--profiles-dir`)
-2. For each output, determines the adapter type and installs:
-   - `dbt-postgres`, `dbt-snowflake`, `dbt-bigquery`, etc.
-3. For bucket outputs (s3, gcs, azure), installs cloud SDKs:
-   - `boto3`, `google-cloud-storage`, `azure-storage-blob`, etc.
-4. Installs/verifies DuckDB and its extensions:
-   - `httpfs`, `delta`, `postgres_scanner`, `mysql_scanner`, etc.
-   - Extensions selected based on adapter types in profiles.yml
-5. Verifies `sling` binary is installed and accessible
-6. Tests all connections (databases + buckets)
-7. Reports status
+**What it does (in order):**
+1. Purges dbt-core if present (conflicts with dvt-ce namespace)
+2. Reads profiles.yml (default `~/.dvt/` then `~/.dbt/`)
+3. **Core deps verification**: checks duckdb, pyarrow, sqlglot, sling are importable — installs if missing (catches partial installs from memory/network failures)
+4. **Adapter driver verification**: checks the actual database driver (psycopg2, mysql.connector, pyodbc, oracledb, snowflake.connector, etc.) — not just the adapter module. Installs missing drivers via `uv pip` or `pip`.
+5. Installs cloud SDKs for bucket connections (boto3, google-cloud-storage, etc.)
+6. Installs DuckDB extensions (delta, json, postgres_scanner, mysql_scanner)
+7. Verifies Sling binary (bootstraps if needed)
 
 **Flags:**
-- `--profiles-dir` — path to directory containing profiles.yml (default: `~/.dbt/`)
-- `--python-env` — path to Python environment to install into (default: current env)
+- `--profiles-dir` — path to directory containing profiles.yml (default: `~/.dvt/`)
 - `--skip-test` — skip connection testing
 - `--dry-run` — show what would be installed without installing
 
 **Example output:**
 ```
-dvt sync
+dvt sync — reading profiles from: /home/hex/.dvt
+
+  Found 9 outputs across 1 profile(s)
+  Adapter types: databricks, mysql, oracle, postgres, snowflake, sqlserver
+
   Adapters:
-    snowflake .... dbt-snowflake 1.9.0 [installed]
-    postgres ..... dbt-postgres 1.9.0 [installing...]
-    mysql ........ dbt-mysql 1.9.0 [installing...]
-  Buckets:
-    s3 ........... boto3 1.34.0 [installed]
-    gcs .......... google-cloud-storage 2.14.0 [installing...]
+    postgres ...................... 🟩
+    snowflake ..................... 🟩
+    mysql ......................... 🟩
+
   DuckDB:
-    core ......... duckdb 1.1.0 [installed]
-    httpfs ....... [installed]
-    delta ........ [installed]
-    postgres ..... [installing...]
+    core ........................ duckdb 1.5.1 [installed]
+    delta ......................... 🟩
+    json .......................... 🟩
+    postgres_scanner .............. 🟩
+
   Sling:
-    binary ....... sling v1.5.12 [installed]
-  Connections:
-    prod_snowflake .. OK (Snowflake, 0.3s)
-    source_postgres . OK (PostgreSQL 16.2, 0.1s)
-    data_lake ...... OK (S3, us-east-1, 0.2s)
+    binary ........................ sling 1.5.13 [installed]
+
+  Sync complete. Environment ready.
 ```
+
+**Self-healing**: dvt sync is designed to be run repeatedly. It detects and fixes:
+- Missing database drivers (psycopg2 not installed → installs it)
+- Missing core deps (duckdb failed to install due to memory → retries)
+- dbt-core conflicts (accidentally installed → removes it)
+- New adapters added to profiles.yml → installs their drivers
 
 ---
 
@@ -193,21 +195,58 @@ dvt show [--select MODEL] [--inline SQL] [--limit N] [--output FORMAT]
 
 ---
 
+### dvt init
+
+Initialize a new DVT project.
+
+```bash
+dvt init [PROJECT_NAME] [--skip-profile-setup]
+```
+
+**What it does:**
+1. If no project name given, defaults to current directory name and scaffolds **in-place** (no subdirectory)
+2. If project name given, creates `PROJECT_NAME/` subdirectory with scaffold
+3. Creates `~/.dvt/` directory and `profiles.yml` if they don't exist
+4. Prompts user to select one of 13 database adapters
+5. Writes a template profile to `~/.dvt/profiles.yml` (appends if file exists)
+6. `--skip-profile-setup` still creates a default postgres profile
+7. Does NOT load adapter drivers (defers to `dvt sync` — no psycopg2 crash)
+8. Output references DVT GitHub + Discord, not dbt
+
+**Notes:**
+- Replaces dbt's InitTask entirely (DvtInitTask)
+- Creates: `dbt_project.yml`, `models/`, `seeds/`, `tests/`, `macros/`, `snapshots/`, `analyses/`
+- Sample model: `models/example/my_first_model.sql`
+
+---
+
 ### dvt debug
 
 Check all connections and environment health.
 
 ```bash
-dvt debug [--profiles-dir PATH]
+dvt debug [--profiles-dir PATH] [--target TARGET]
 ```
 
 **What it does:**
-1. Verifies profiles.yml is valid
-2. Tests ALL connections (databases + buckets)
-3. Checks Sling binary availability and version
-4. Checks DuckDB extensions
-5. Checks dbt adapter installations
-6. Reports per-connection: type, version, latency, status
+1. Tests each connection with BOTH the native adapter driver AND Sling
+2. Shows dual status: `Adapter: OK | Sling: OK`
+3. Connection is OK if adapter passes; Sling failure is visible but non-blocking
+4. Checks Sling binary availability and version
+5. Checks DuckDB availability and version
+6. Reports per-connection: type, latency, status
+7. Sling sslmode fallback: retries with `sslmode=disable` if `prefer` fails
+
+**Output format:**
+```
+  Connections:
+    🟩 pg_dev ........................ postgres (1.6s)
+       Adapter: OK | Sling: OK
+    🟩 sf_dev ........................ snowflake (5.8s)
+       Adapter: OK | Sling: OK
+    🟩 mssql_docker .................. sqlserver (1.6s)
+       Adapter: OK | Sling: FAIL
+```
 
 ---
 
@@ -260,7 +299,7 @@ dvt docs serve [--port PORT] [--host HOST]
 2. Runs dbt's GenerateTask to build the catalog
 3. Enriches catalog with cross-engine column metadata from all remote sources
 4. Generates HTML with DVT-branded UI:
-   - DVT swirl logo + "Data Virtualization Tool" in sidebar
+   - DVT swirl logo + "Data Catalog" in sidebar
    - Engine-colored nodes in lineage graph (each engine has brand colors)
    - Connection badges on source and model labels
    - Target + Engine fields in model detail panels

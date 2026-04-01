@@ -164,22 +164,41 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 | P13.6.3: DuckDB cache cleanup | DONE | Drops `__model__` tables from cache for retracted models. |
 | P13.6.4: Multi-engine support | DONE | Connects to each model's target via native driver to execute DROP. |
 
-### Phase 14: README + Branding [DONE]
+### Phase 14: README + Branding + Init [DONE]
 
 | Item | Status | Details |
 |------|--------|---------|
-| P14.1: GitHub/PyPI README | DONE | Comprehensive README: architecture diagram, all 13 engines, all commands, configuration examples, two-dialect explanation, incremental models, `--target` philosophy. |
-| P14.2: DVT logo in docs | DONE | Replaced dbt SVG with DVT swirl logo (50x50) + "Data Virtualization Tool" text in sidebar. |
+| P14.1: GitHub/PyPI README | DONE | Mermaid architecture diagram, engine table with emojis, badges (PyPI, Python, Discord, License), credits (dbt-core, Sling free tier, DuckDB), Hesham LinkedIn, Apache 2.0 LICENSE file. |
+| P14.2: DVT logo in docs | DONE | White-bg colorful swirl logo (7.png), 60px, cropped for fill. "Data Catalog" text bold 15px next to it. |
 | P14.3: Docs branding | DONE | Page title "DVT Docs", meta tags updated, dbt references replaced. |
 | P14.4: Engine-colored lineage | DONE | Source + model nodes colored by engine brand colors. Target/Engine fields in detail panels. |
+| P14.5: `dvt init` rewrite | DONE | DVT-specific init: defaults project name to current dir, scaffolds in-place (no subdirectory), creates `~/.dvt/profiles.yml`, 13 adapter selection, no psycopg2 crash. |
+| P14.6: Root README sync | DONE | Root `README.md` synced with `core/README.md`. GitHub shows DVT README on all branches. |
+
+### Phase 14.5: Stability + PyPI Fixes [DONE]
+
+| Item | Status | Details |
+|------|--------|---------|
+| P14.5.1: PyPI version fix | DONE | Old Spark versions (0.1.9–0.1.22) outranked new Sling versions. Fixed by publishing 0.1.23+ from new_dev branch. |
+| P14.5.2: Graceful driver error | DONE | All commands show clean "Run dvt sync" message instead of raw Python traceback when database drivers are missing. |
+| P14.5.3: Sling sslmode fix | DONE | `sslmode=prefer` mapped to `disable` in connection_mapper — Sling's pq driver doesn't support `prefer`/`allow`. Fixes seeds, extraction, debug on all platforms. |
+| P14.5.4: `dvt sync` core deps | DONE | Sync now verifies and installs missing core deps (duckdb, pyarrow, sqlglot, sling) — catches partial installs from memory/network failures. |
+| P14.5.5: `dvt sync` driver check | DONE | Checks actual database driver (psycopg2, not just dbt.adapters.postgres) — catches cases where adapter code exists but driver pip package is missing. |
+| P14.5.6: `dvt debug` dual test | DONE | Tests BOTH adapter (native driver) AND Sling for each connection. Shows "Adapter: OK \| Sling: OK". |
+| P14.5.7: Missing CLI decorators | DONE | `dvt test` was missing `@p.resource_type`/`@p.exclude_resource_type`. `dvt snapshot` was missing `@p.empty`. Audited all commands against dbt originals. |
+| P14.5.8: dvt-adapters dependency | DONE | Changed `dvt-adapters>=0.2.1` to `>=0.1.23` in setup.py. |
+| P14.5.9: setup.py author/URL | DONE | Changed from dbt Labs to Hesham Badawi + DVT GitHub URL. |
+| P14.5.10: dvt-pro reserved | DONE | PyPI name reserved at 0.1.23. GitHub repo: heshamh96/dvt-pro (private). |
 
 ### Phase 15: Advanced Features
 
 | Item | Priority | Details |
 |------|----------|---------|
 | P15.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')` |
-| P15.2: CDC extraction | LOW | Sling `change-capture` mode |
+| P15.2: CDC extraction | LOW | Sling `change-capture` mode (dvt-pro feature) |
 | P15.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH |
+| P15.4: Remote catalog enrichment | MEDIUM | Query non-default target engines for model column metadata (currently only sources are enriched) |
+| P15.5: DVT website | LOW | Dedicated domain (dvt.dev or getdvt.com) — landing page, docs, pricing |
 
 ### Phase 16: Testing + Release
 
@@ -187,8 +206,26 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 |------|----------|---------|
 | P16.1: Unit tests | MEDIUM | Watermark formatter, connection mapper, target resolver, optimizer |
 | P16.2: Integration test suite | MEDIUM | Automated E2E tests for all execution paths |
-| P16.3: PyPI publish (clean release) | MEDIUM | dvt-ce + dvt-adapters with all UX fixes |
+| P16.3: PyPI publish automation | MEDIUM | Skill-based publish: bump version, build, upload, push, sync branches |
 | P16.4: GitHub release notes | LOW | Changelog, migration guide from dbt |
+
+---
+
+## VERSION HISTORY
+
+| Version | Date | Highlights |
+|---------|------|-----------|
+| 0.1.34 | 2026-03-31 | Docs logo "Data Catalog", all stability fixes |
+| 0.1.30 | 2026-03-30 | Missing CLI decorators fixed (test, snapshot) |
+| 0.1.29 | 2026-03-30 | Sling sslmode=prefer→disable fix |
+| 0.1.28 | 2026-03-30 | Graceful driver-missing error |
+| 0.1.27 | 2026-03-30 | dvt sync core deps verification |
+| 0.1.25 | 2026-03-30 | dvt init in-place + dvt debug dual test |
+| 0.1.24 | 2026-03-30 | dvt init rewrite (DVT-specific) |
+| 0.1.23 | 2026-03-30 | Version bump past old Spark releases on PyPI |
+| 0.1.8 | 2026-03-25 | P13 docs lineage + retract + branding |
+| 0.1.6 | 2026-03-22 | P13.2+P13.3 engine-colored lineage |
+| 0.1.5 | 2026-03-18 | P12 source connection v2 |
 
 ---
 

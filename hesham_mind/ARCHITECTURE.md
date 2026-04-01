@@ -124,16 +124,15 @@ core/
       commands.py                   # Command definitions
     tasks/
       __init__.py
-      run.py                        # DvtRunTask(RunTask)
-      build.py                      # DvtBuildTask(BuildTask)
-      compile.py                    # DvtCompileTask(CompileTask)
-      test.py                       # DvtTestTask(TestTask)
-      seed.py                       # DvtSeedTask — Sling-based seeding
-      sync.py                       # DvtSyncTask — environment bootstrap
+      run.py                        # DvtRunTask(RunTask) — extraction + pushdown dispatch
+      build.py                      # DvtBuildTask(BuildTask) — seeds + models + tests in DAG
+      seed.py                       # DvtSeedTask — Sling-based CSV loading
+      sync.py                       # DvtSyncTask — env bootstrap + core deps + driver verification
       show.py                       # DvtShowTask — DuckDB local query
-      debug.py                      # DvtDebugTask — multi-connection checks
-      docs.py                       # Cross-engine catalog enrichment + engine stamping
+      debug.py                      # DvtDebugTask — tests BOTH adapter AND Sling per connection
+      docs.py                       # Cross-engine catalog enrichment + dvt_adapter_type stamping
       retract.py                    # DvtRetractTask — reverse DAG model drop
+      init.py                       # DvtInitTask — DVT-specific project scaffold (replaces dbt init)
     runners/
       __init__.py
       model_runner.py               # DvtModelRunner(ModelRunner)
