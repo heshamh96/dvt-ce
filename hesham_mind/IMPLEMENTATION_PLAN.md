@@ -192,13 +192,12 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 
 ### Phase 15: Advanced Features
 
-| Item | Priority | Details |
-|------|----------|---------|
-| P15.1: Bucket materialization | MEDIUM | `config(target='s3_bucket', format='delta')` |
-| P15.2: CDC extraction | LOW | Sling `change-capture` mode (dvt-pro feature) |
-| P15.3: Virtual federation | LOW | `materialized='virtual'` via DuckDB ATTACH |
-| P15.4: Remote catalog enrichment | MEDIUM | Query non-default target engines for model column metadata (currently only sources are enriched) |
-| P15.5: DVT website | LOW | Dedicated domain (dvt.dev or getdvt.com) — landing page, docs, pricing |
+| Item | Priority | Status | Details |
+|------|----------|--------|---------|
+| P15.1: Bucket materialization | MEDIUM | | `config(target='s3_bucket', format='delta')` |
+| P15.2: CDC extraction | LOW | | Sling `change-capture` mode (dvt-pro feature) |
+| P15.4: Remote catalog enrichment | MEDIUM | DONE | Models on non-default targets now get column metadata. 68/70 models with columns (2 ephemeral = correct). |
+| P15.5: DVT website | LOW | | Dedicated domain (dvt.dev or getdvt.com) — landing page, docs, pricing |
 
 ### Phase 16: Testing + Release
 
