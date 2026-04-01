@@ -41,10 +41,21 @@
    ├── Also verifies: PostHog audit events appear in dashboard
    └── PASS? → Step 5
 
-5. RELEASE VERIFIED
+5. SYNC BRANCHES
    ├── git branch -f uat new_dev && git branch -f master new_dev
    ├── Force push uat + master
-   └── Done — version is production-ready
+   └── Proceed to final verification
+
+6. CUSTOMER VERIFICATION (final gate)
+   ├── Fresh directory, clean install: uv init test && cd test && uv add dvt-ce
+   ├── uv run dvt init → scaffolds correctly
+   ├── uv run dvt sync → installs drivers
+   ├── uv run dvt debug → connections OK
+   ├── uv run dvt seed → seeds load
+   ├── uv run dvt run → models execute
+   ├── PostHog → events visible in dashboard
+   ├── This simulates EXACTLY what a new customer experiences
+   └── PASS? → Release is production-ready. FAIL? → Back to step 0.
 ```
 
 ---
