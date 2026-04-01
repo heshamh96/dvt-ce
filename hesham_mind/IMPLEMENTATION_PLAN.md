@@ -196,7 +196,7 @@ Developed on `feature/ux-branding-overhaul` branch, merged to `new_dev`.
 |------|----------|--------|---------|
 | P15.1: Bucket materialization | MEDIUM | | `config(target='s3_bucket', format='delta')` |
 | P15.2: CDC extraction | LOW | | Sling `change-capture` mode (dvt-pro feature) |
-| P15.4: Remote catalog enrichment | MEDIUM | DONE | Models on non-default targets now get column metadata. 68/70 models with columns (2 ephemeral = correct). |
+| P15.4: Remote catalog enrichment | MEDIUM | DONE | Models on non-default targets now get column metadata. 68/70 models with columns across 6 engines (2 ephemeral = correct). Verified on trial 20. |
 | P15.5: DVT website | LOW | | Dedicated domain (dvt.dev or getdvt.com) — landing page, docs, pricing |
 
 ### Phase 16: Testing + Release
