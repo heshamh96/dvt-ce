@@ -7,6 +7,12 @@
 ## Sequence
 
 ```
+0. UNIT + INTEGRATION TESTS
+   ├── cd core && hatch run unit-tests (or pytest tests/unit/)
+   ├── cd core && hatch run integration-tests (needs Postgres at localhost:5433)
+   ├── Catches: regressions, broken imports, contract violations
+   └── PASS? → Step 1
+
 1. EDITABLE MODE (source code)
    ├── Trial 20 in editable_mode/
    ├── Uses: [tool.uv.sources] dvt-ce = { path = "...", editable = true }
