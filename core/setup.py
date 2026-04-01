@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+import glob
 import os
 import sys
 
@@ -8,12 +9,11 @@ if sys.version_info < (3, 9):
     sys.exit(1)
 
 
-from setuptools import setup
+from setuptools import setup, Extension
 
 try:
     from setuptools import find_namespace_packages
 except ImportError:
-    # the user has a downlevel version of setuptools.
     print("Error: dbt requires setuptools v40.1.0 or higher.")
     print(
         'Please upgrade setuptools with "pip install --upgrade setuptools" '
@@ -28,8 +28,71 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 
 package_name = "dvt-ce"
-package_version = "0.1.34"
+package_version = "0.1.35"
 description = """DVT — cross-engine data transformation tool with DuckDB federation."""
+
+
+# ---------------------------------------------------------------------------
+# Cython compilation — compile .py to .so for source code protection
+# ---------------------------------------------------------------------------
+
+# Files that MUST stay as .py (dynamic imports, namespace packages)
+EXCLUDE_FROM_CYTHON = {
+    # Namespace packages with extend_path / pkgutil
+    os.path.join("dbt", "__init__.py"),
+    os.path.join("dbt", "include", "__init__.py"),
+    # Dynamic plugin/adapter discovery (importlib.import_module, __import__)
+    os.path.join("dbt", "version.py"),
+    os.path.join("dbt", "plugins", "manager.py"),
+    # Resilient CLI entry point (catches ImportError for fallback)
+    os.path.join("dvt", "cli", "__init__.py"),
+    # Dynamic adapter/driver checking (__import__ for adapter names)
+    os.path.join("dvt", "tasks", "sync.py"),
+    os.path.join("dvt", "sync", "adapter_installer.py"),
+    os.path.join("dvt", "sync", "cloud_deps.py"),
+}
+
+ext_modules = []
+
+try:
+    from Cython.Build import cythonize
+
+    # Collect all .py files under dbt/ and dvt/
+    all_py = glob.glob("dbt/**/*.py", recursive=True) + glob.glob(
+        "dvt/**/*.py", recursive=True
+    )
+
+    to_compile = []
+    for f in all_py:
+        # Skip excluded files
+        if f in EXCLUDE_FROM_CYTHON:
+            continue
+        # Skip all __init__.py (namespace package markers)
+        if os.path.basename(f) == "__init__.py":
+            continue
+        # Skip non-Python assets in dbt/include/
+        if f.startswith(os.path.join("dbt", "include", "starter_project")):
+            continue
+        # Skip test fixtures and docs
+        if f.startswith(os.path.join("dbt", "tests")):
+            continue
+        if f.startswith(os.path.join("dbt", "docs")):
+            continue
+        # Skip any top-level files outside dbt/dvt packages
+        if not (f.startswith("dbt" + os.sep) or f.startswith("dvt" + os.sep)):
+            continue
+        to_compile.append(f)
+
+    ext_modules = cythonize(
+        to_compile,
+        compiler_directives={"language_level": "3"},
+        quiet=True,
+    )
+    print(f"Cython: compiling {len(to_compile)} modules")
+
+except ImportError:
+    # Cython not installed — build as pure Python (development mode)
+    print("Cython not found — building as pure Python")
 
 
 setup(
@@ -50,6 +113,7 @@ setup(
             "dbt = dbt.cli.main:cli",
         ],
     },
+    ext_modules=ext_modules,
     install_requires=[
         # ----
         # dbt-core uses these packages deeply, throughout the codebase, and there have been breaking changes in past patch releases (even though these are major-version-one).
