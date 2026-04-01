@@ -229,6 +229,120 @@ def enrich_catalog_with_remote_sources(
             json.dump(catalog, f, indent=2)
 
 
+def enrich_catalog_with_remote_models(
+    catalog_path: str,
+    manifest: Any,
+    profiles_dir: str,
+) -> None:
+    """Enrich catalog.json with column metadata for models on non-default targets.
+
+    Models materialized on Databricks, Snowflake, etc. don't get columns from
+    dbt's default adapter catalog. This queries each remote engine directly.
+    """
+    try:
+        profiles = read_profiles_yml(profiles_dir)
+    except Exception:
+        return
+
+    if not os.path.isfile(catalog_path):
+        return
+
+    # Resolve default target
+    default_target = ""
+    for profile_name, profile_data in profiles.items():
+        if not isinstance(profile_data, dict):
+            continue
+        default_target = profile_data.get("target", "")
+        if default_target:
+            break
+
+    with open(catalog_path, "r") as f:
+        catalog = json.load(f)
+
+    updated = False
+
+    for uid, node in manifest.nodes.items():
+        resource_type = getattr(node, "resource_type", "")
+        if resource_type not in ("model", "seed", "snapshot"):
+            continue
+
+        # Skip ephemeral models (no physical object)
+        materialization = ""
+        try:
+            materialization = node.get_materialization()
+        except Exception:
+            config = getattr(node, "config", None)
+            if config:
+                try:
+                    materialization = config.get("materialized", "")
+                except Exception:
+                    pass
+        if materialization == "ephemeral":
+            continue
+
+        # Skip if catalog already has columns for this node
+        existing = catalog.get("nodes", {}).get(uid, {})
+        if existing.get("columns"):
+            continue
+
+        # Get model's target
+        model_target = ""
+        config = getattr(node, "config", None)
+        if config:
+            try:
+                model_target = config["target"] or ""
+            except (KeyError, TypeError):
+                model_target = getattr(config, "target", "") or ""
+        target_name = model_target or default_target
+        if not target_name:
+            continue
+
+        # Get target config
+        conn_config = _get_output_config(target_name, profiles)
+        if not conn_config:
+            continue
+
+        adapter_type = conn_config.get("type", "")
+
+        # Resolve schema — for non-default targets, use target's schema
+        schema = getattr(node, "schema", "")
+        if target_name != default_target:
+            target_schema = conn_config.get(
+                "schema", conn_config.get("database", "")
+            )
+            if target_schema:
+                schema = target_schema
+
+        table = getattr(node, "name", "")
+        database = getattr(node, "database", "")
+
+        columns = _query_columns(adapter_type, conn_config, schema, table)
+
+        if columns:
+            catalog.setdefault("nodes", {})[uid] = {
+                "metadata": {
+                    "type": "BASE TABLE" if materialization != "view" else "VIEW",
+                    "schema": schema,
+                    "name": table,
+                    "database": database,
+                    "comment": None,
+                    "owner": target_name,
+                },
+                "columns": columns,
+                "stats": {},
+                "unique_id": uid,
+            }
+            updated = True
+            logger.info(
+                f"dvt docs: model {table} → "
+                f"{len(columns)} columns from {adapter_type} ({target_name})"
+            )
+
+    if updated:
+        with open(catalog_path, "w") as f:
+            json.dump(catalog, f, indent=2)
+
+
 def _query_columns(
     adapter_type: str,
     conn_config: Dict[str, Any],

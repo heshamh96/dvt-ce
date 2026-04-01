@@ -733,6 +733,15 @@ def docs_generate(ctx, **kwargs):
             project_dir=project_dir,
             profiles_dir=profiles_dir,
         )
+
+        # Also enrich models on non-default targets
+        from dvt.tasks.docs import enrich_catalog_with_remote_models
+
+        enrich_catalog_with_remote_models(
+            catalog_path=catalog_path,
+            manifest=ctx.obj["manifest"],
+            profiles_dir=profiles_dir,
+        )
     except Exception as e:
         import logging
 
