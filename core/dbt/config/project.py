@@ -565,7 +565,7 @@ class PartialProject(RenderComponents):
             packages_dict,
             packages_specified_path,
         ) = package_and_project_data_from_root(project_root)
-        selectors_dict = selector_data_from_root(project_root)
+        selectors_dict = selector_data_from_root(project_root) or {}
 
         return cls.from_dicts(
             project_root=project_root,
