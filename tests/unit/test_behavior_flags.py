@@ -13,7 +13,7 @@ from dbt_common.events.event_manager_client import (
 
 
 @pytest.fixture
-def snowplow_tracker(mocker):
+def posthog_tracker(mocker):
     # initialize `active_user` without writing the cookie to disk
     initialize_from_flags(True, "")
     mocker.patch("dbt.tracking.User.set_cookie").return_value = {"id": 42}
@@ -21,28 +21,27 @@ def snowplow_tracker(mocker):
     # add the relevant callback to the event manager
     add_callback_to_manager(track_behavior_change_warn)
 
-    # don't make a call, catch the request
-    # to avoid confusion, this is snowplow_tracker's track, not our wrapper that's also named track
-    snowplow_tracker = mocker.patch("dbt.tracking.tracker.track")
+    # mock the PostHog capture call (replaces old snowplow tracker.track mock)
+    posthog_mock = mocker.patch("dbt.tracking.track")
 
-    yield snowplow_tracker
+    yield posthog_mock
 
     # teardown
     cleanup_event_logger()
     disable_tracking()
 
 
-def test_false_evaluation_triggers_snowplow_tracking(snowplow_tracker):
+def test_false_evaluation_triggers_tracking(posthog_tracker):
     behavior = Behavior(
         [{"name": "my_flag", "default": False, "description": "This is a false flag."}], {}
     )
     if behavior.my_flag:
         # trigger a False evaluation
         assert False, "This flag should evaluate to false and skip this line"
-    assert snowplow_tracker.called
+    assert posthog_tracker.called
 
 
-def test_true_evaluation_does_not_trigger_snowplow_tracking(snowplow_tracker):
+def test_true_evaluation_does_not_trigger_tracking(posthog_tracker):
     behavior = Behavior(
         [{"name": "my_flag", "default": True, "description": "This is a true flag."}], {}
     )
@@ -51,16 +50,15 @@ def test_true_evaluation_does_not_trigger_snowplow_tracking(snowplow_tracker):
     else:
         # trigger a True evaluation
         assert False, "This flag should evaluate to false and skip this line"
-    assert not snowplow_tracker.called
+    assert not posthog_tracker.called
 
 
-def test_false_evaluation_does_not_trigger_snowplow_tracking_when_disabled(snowplow_tracker):
+def test_false_evaluation_does_not_trigger_tracking_when_disabled(posthog_tracker):
     disable_tracking()
 
     behavior = Behavior(
         [{"name": "my_flag", "default": False, "description": "This is a false flag."}], {}
     )
     if behavior.my_flag:
-        # trigger a False evaluation
         assert False, "This flag should evaluate to false and skip this line"
-    assert not snowplow_tracker.called
+    assert not posthog_tracker.called
