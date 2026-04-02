@@ -23,7 +23,7 @@ class TestSetupEventLogger:
 
         setup_event_logger(get_flags())
         assert len(manager.loggers) == 0
-        assert len(manager.callbacks) == 1  # snowplow tracker for behavior flags
+        assert len(manager.callbacks) == 1  # PostHog tracker for behavior flags
 
     def test_specify_max_bytes(
         self,
@@ -34,5 +34,5 @@ class TestSetupEventLogger:
         set_from_args(args, {})
         setup_event_logger(get_flags())
         patched_file_handler.assert_called_once_with(
-            filename="logs/dbt.log", encoding="utf8", maxBytes=1234567, backupCount=5
+            filename="logs/dvt.log", encoding="utf8", maxBytes=1234567, backupCount=5
         )
