@@ -6,7 +6,7 @@ dbt-adapters==1.17.3
 dbt-tests-adapter==1.19.1
 
 # black must match what's in .pre-commit-config.yaml to be sure local env matches CI
-black==24.3.0
+black==26.3.1
 bumpversion
 ddtrace==2.3.0
 docutils
