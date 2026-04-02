@@ -28,7 +28,7 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 
 package_name = "dvt-ce"
-package_version = "0.1.43"
+package_version = "0.1.44"
 description = """DVT — cross-engine data transformation tool with DuckDB federation."""
 
 
@@ -54,7 +54,14 @@ EXCLUDE_FROM_CYTHON = {
 
 ext_modules = []
 
+# Skip Cython compilation for editable/develop installs
+_is_editable = any(
+    x in sys.argv for x in ("develop", "editable_wheel", "--editable")
+) or os.environ.get("DVT_SKIP_CYTHON", "") == "1"
+
 try:
+    if _is_editable:
+        raise ImportError("Skipping Cython for editable install")
     from Cython.Build import cythonize
 
     # Collect all .py files under dbt/ and dvt/
