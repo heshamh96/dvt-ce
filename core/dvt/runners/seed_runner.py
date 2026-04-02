@@ -90,6 +90,20 @@ class DvtSeedRunner(SeedRunner):
             msg = f"INSERT {rows}"
             logger.info(f"DVT [{model.name}]: {msg} ({elapsed:.2f}s)")
 
+            # Audit: track seed loaded
+            try:
+                from dbt.tracking import track_dvt_seed
+                track_dvt_seed({
+                    "seed_name_hash": __import__("hashlib").md5(
+                        model.name.encode()).hexdigest(),
+                    "row_count": rows,
+                    "target_adapter_type": target_config.get("type", ""),
+                    "duration_seconds": round(elapsed, 2),
+                    "success": True,
+                })
+            except Exception:
+                pass
+
             return RunResult(
                 status=RunStatus.Success,
                 thread_id=threading.current_thread().name,

@@ -492,6 +492,33 @@ class DvtModelRunner(ModelRunner):
             elapsed = time.time() - start
             incr_label = " (incremental)" if is_incremental else ""
             msg = f"SELECT {row_count}{incr_label}"
+
+            # Audit: track extraction path usage
+            try:
+                from dbt.tracking import track_dvt_extraction
+                source_adapter_types = list(set(
+                    sm[6].get("type", "") for sm in source_meta if sm[6]
+                ))
+                target_type = ""
+                try:
+                    tc = self._get_output_config(resolution.target)
+                    target_type = tc.get("type", "")
+                except Exception:
+                    pass
+                track_dvt_extraction({
+                    "model_name_hash": __import__("hashlib").md5(
+                        model.name.encode()).hexdigest(),
+                    "execution_path": "extraction",
+                    "source_adapter_types": source_adapter_types,
+                    "target_adapter_type": target_type,
+                    "is_incremental": is_incremental,
+                    "row_count": row_count,
+                    "duration_seconds": round(elapsed, 2),
+                    "success": True,
+                })
+            except Exception:
+                pass
+
             return _make_run_result(model, RunStatus.Success, msg, elapsed, row_count)
 
         except Exception as e:
