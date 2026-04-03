@@ -28,7 +28,7 @@ with open(os.path.join(this_directory, "README.md")) as f:
 
 
 package_name = "dvt-ce"
-package_version = "0.1.44"
+package_version = "0.1.45"
 description = """DVT — cross-engine data transformation tool with DuckDB federation."""
 
 
@@ -92,7 +92,12 @@ try:
 
     ext_modules = cythonize(
         to_compile,
-        compiler_directives={"language_level": "3"},
+        compiler_directives={
+            "language_level": "3",
+            # Don't enforce type annotations — dbt uses str subclasses
+            # (ValidatedStringMixin) that Cython rejects as non-str
+            "annotation_typing": False,
+        },
         quiet=True,
     )
     print(f"Cython: compiling {len(to_compile)} modules")
