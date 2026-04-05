@@ -25,8 +25,39 @@ from dvt.tasks.docs import _get_connection, _get_output_config
 
 logger = logging.getLogger(__name__)
 
-# Engines that support CASCADE on DROP
-CASCADE_ENGINES = {"postgres", "redshift", "snowflake", "oracle", "duckdb"}
+
+def _build_drop_sql(adapter_type: str, table_name: str, obj_type: str) -> str:
+    """Build dialect-aware DROP SQL for each engine.
+
+    Matches the adapter-specific DROP logic in dvt-adapters:
+    - Oracle: PL/SQL block with CASCADE CONSTRAINTS PURGE + exception handling
+    - Postgres/Redshift/Snowflake/DuckDB: IF EXISTS + CASCADE
+    - Databricks/BigQuery: IF EXISTS, no CASCADE
+    - MySQL/MariaDB/SQL Server: IF EXISTS, no CASCADE
+    """
+    if adapter_type == "oracle":
+        # Oracle: no IF EXISTS syntax, use PL/SQL exception handling
+        # Tables: CASCADE CONSTRAINTS PURGE (skip recycle bin)
+        # Views: CASCADE CONSTRAINTS
+        if obj_type == "TABLE":
+            return (
+                f"BEGIN EXECUTE IMMEDIATE "
+                f"'DROP TABLE {table_name} CASCADE CONSTRAINTS PURGE'; "
+                f"EXCEPTION WHEN OTHERS THEN "
+                f"IF SQLCODE != -942 THEN RAISE; END IF; END;"
+            )
+        else:
+            return (
+                f"BEGIN EXECUTE IMMEDIATE "
+                f"'DROP VIEW {table_name} CASCADE CONSTRAINTS'; "
+                f"EXCEPTION WHEN OTHERS THEN "
+                f"IF SQLCODE != -942 THEN RAISE; END IF; END;"
+            )
+    elif adapter_type in ("postgres", "redshift", "snowflake", "duckdb"):
+        return f"DROP {obj_type} IF EXISTS {table_name} CASCADE"
+    else:
+        # MySQL, MariaDB, SQL Server, Databricks, BigQuery — no CASCADE
+        return f"DROP {obj_type} IF EXISTS {table_name}"
 
 
 class DvtRetractTask(GraphRunnableTask):
@@ -238,13 +269,12 @@ class DvtRetractTask(GraphRunnableTask):
         table_name: str,
         obj_type: str,
     ) -> tuple:
-        """Drop a table/view from the target. Always uses CASCADE."""
+        """Drop a table/view from the target using dialect-aware SQL."""
         conn = _get_connection(adapter_type, target_config)
         if not conn:
             return ("skip", f"cannot connect to {adapter_type}")
 
-        cascade = " CASCADE" if adapter_type in CASCADE_ENGINES else ""
-        drop_sql = f"DROP {obj_type} IF EXISTS {table_name}{cascade}"
+        drop_sql = _build_drop_sql(adapter_type, table_name, obj_type)
 
         try:
             cursor = conn.cursor()
